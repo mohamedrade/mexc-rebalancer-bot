@@ -13,10 +13,21 @@ ALLOWED_USER_IDS = [
     int(i.strip()) for i in os.environ.get("ALLOWED_USER_IDS", "").split(",")
     if i.strip().isdigit()
 ]
-DATABASE_PATH = os.environ.get("DATABASE_PATH", "bot.db").strip()
+_db_path = os.environ.get("DATABASE_PATH", "bot.db").strip()
+
+# Auto-create directory if it doesn't exist
+_db_dir = os.path.dirname(_db_path)
+if _db_dir and not os.path.exists(_db_dir):
+    try:
+        os.makedirs(_db_dir, exist_ok=True)
+        print(f"[INFO] Created directory: {_db_dir}", flush=True)
+    except Exception as e:
+        print(f"[WARN] Could not create {_db_dir}: {e} — using bot.db", flush=True)
+        _db_path = "bot.db"
+
+DATABASE_PATH = _db_path
 QUOTE_CURRENCY = os.environ.get("QUOTE_CURRENCY", "USDT").strip()
 
-# Simple namespace object for compatibility
 class _Config:
     telegram_token = TELEGRAM_BOT_TOKEN
     allowed_user_ids = ALLOWED_USER_IDS
@@ -24,3 +35,4 @@ class _Config:
     quote_currency = QUOTE_CURRENCY
 
 config = _Config()
+print(f"[INFO] Config loaded. DB: {DATABASE_PATH} | Users: {ALLOWED_USER_IDS}", flush=True)
