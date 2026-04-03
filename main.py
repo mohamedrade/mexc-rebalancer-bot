@@ -49,33 +49,7 @@ def build_app() -> Application:
 
     TEXT = filters.TEXT & ~filters.COMMAND
 
-    # ── Commands ───────────────────────────────────────────────────────────────
-    app.add_handler(CommandHandler("start", start_handler))
-    app.add_handler(CommandHandler("help", help_handler))
-    app.add_handler(CommandHandler("menu", menu_command))
-
-    # ── Navigation ─────────────────────────────────────────────────────────────
-    app.add_handler(CallbackQueryHandler(handle_menu_callback, pattern="^menu:"))
-    app.add_handler(CallbackQueryHandler(portfolio_callback,   pattern="^balance$"))
-    app.add_handler(CallbackQueryHandler(history_callback,     pattern="^history$"))
-
-    # ── Rebalance ──────────────────────────────────────────────────────────────
-    app.add_handler(CallbackQueryHandler(rebalance_callback, pattern="^rebalance:"))
-
-    # ── Settings ───────────────────────────────────────────────────────────────
-    app.add_handler(CallbackQueryHandler(settings_callback,     pattern="^settings:view"))
-    app.add_handler(CallbackQueryHandler(toggle_auto_callback,  pattern="^toggle_auto$"))
-    app.add_handler(CallbackQueryHandler(del_alloc_callback,    pattern="^del_alloc:"))
-    app.add_handler(CallbackQueryHandler(clear_allocs_callback, pattern="^clear_allocs"))
-
-    # ── Portfolio Management ───────────────────────────────────────────────────
-    app.add_handler(CallbackQueryHandler(portfolios_callback,               pattern="^portfolios$"))
-    app.add_handler(CallbackQueryHandler(portfolio_detail_callback,         pattern="^portfolio:\\d+$"))
-    app.add_handler(CallbackQueryHandler(switch_portfolio_callback,         pattern="^portfolio_switch:"))
-    app.add_handler(CallbackQueryHandler(delete_portfolio_callback,         pattern="^portfolio_delete:\\d+$"))
-    app.add_handler(CallbackQueryHandler(delete_portfolio_confirm_callback, pattern="^portfolio_delete_confirm:"))
-
-    # ── Conversations ──────────────────────────────────────────────────────────
+    # ── Conversations (must be registered before simple CallbackQueryHandlers) ─
     api_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(set_api_key_start, pattern="^settings:set_api")],
         states={
@@ -149,6 +123,32 @@ def build_app() -> Application:
     app.add_handler(create_portfolio_conv)
     app.add_handler(edit_name_conv)
     app.add_handler(edit_capital_conv)
+
+    # ── Commands ───────────────────────────────────────────────────────────────
+    app.add_handler(CommandHandler("start", start_handler))
+    app.add_handler(CommandHandler("help", help_handler))
+    app.add_handler(CommandHandler("menu", menu_command))
+
+    # ── Navigation ─────────────────────────────────────────────────────────────
+    app.add_handler(CallbackQueryHandler(handle_menu_callback, pattern="^menu:"))
+    app.add_handler(CallbackQueryHandler(portfolio_callback,   pattern="^balance$"))
+    app.add_handler(CallbackQueryHandler(history_callback,     pattern="^history$"))
+
+    # ── Rebalance ──────────────────────────────────────────────────────────────
+    app.add_handler(CallbackQueryHandler(rebalance_callback, pattern="^rebalance:"))
+
+    # ── Settings ───────────────────────────────────────────────────────────────
+    app.add_handler(CallbackQueryHandler(settings_callback,     pattern="^settings:view"))
+    app.add_handler(CallbackQueryHandler(toggle_auto_callback,  pattern="^toggle_auto$"))
+    app.add_handler(CallbackQueryHandler(del_alloc_callback,    pattern="^del_alloc:"))
+    app.add_handler(CallbackQueryHandler(clear_allocs_callback, pattern="^clear_allocs"))
+
+    # ── Portfolio Management ───────────────────────────────────────────────────
+    app.add_handler(CallbackQueryHandler(portfolios_callback,               pattern="^portfolios$"))
+    app.add_handler(CallbackQueryHandler(portfolio_detail_callback,         pattern="^portfolio:\\d+$"))
+    app.add_handler(CallbackQueryHandler(switch_portfolio_callback,         pattern="^portfolio_switch:"))
+    app.add_handler(CallbackQueryHandler(delete_portfolio_callback,         pattern="^portfolio_delete:\\d+$"))
+    app.add_handler(CallbackQueryHandler(delete_portfolio_confirm_callback, pattern="^portfolio_delete_confirm:"))
 
     return app
 
