@@ -4,6 +4,7 @@ from bot.config import config
 from bot.keyboards import main_menu_kb, settings_kb
 from bot.database import db
 
+
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if config.allowed_user_ids and user.id not in config.allowed_user_ids:
@@ -16,13 +17,14 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📌 *الميزات:*\n"
         "• مراقبة المحفظة في الوقت الفعلي\n"
         "• إعادة التوازن التلقائي واليدوي\n"
-        "• إضافة حتى 20 عملة\n"
-        "• توزيع متساوٍ أو بحسب حجم السوق\n"
+        "• محافظ متعددة برأس مال مستقل لكل منها\n"
+        "• إضافة حتى 20 عملة لكل محفظة\n"
         "• حد انحراف عام يطبَّق على جميع العملات\n\n"
         "⚙️ ابدأ بربط مفاتيح MEXC API من الإعدادات.",
         parse_mode="Markdown",
-        reply_markup=main_menu_kb()
+        reply_markup=main_menu_kb(),
     )
+
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -35,13 +37,23 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "  ✏️ يدوي — تحدد النسبة بنفسك\n\n"
         "*أو أرسل مباشرة بالنسب:*\n"
         "`BTC=40`\n`ETH=30`\n`SOL=20`\n`USDT=10`\n\n"
-        "*حد الانحراف العام:*\n"
-        "نسبة واحدة تطبَّق على جميع العملات.\n"
-        "عند تجاوزها يتم التوازن تلقائياً.\n\n"
+        "📁 *المحافظ المتعددة:*\n"
+        "من زر 📁 محافظي أنشئ محافظ منفصلة\n"
+        "لكل محفظة رأس مال وتوزيع مستقل\n\n"
         "/cancel — إلغاء أي عملية جارية",
         parse_mode="Markdown",
-        reply_markup=main_menu_kb()
+        reply_markup=main_menu_kb(),
     )
+
+
+async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler for /menu command."""
+    await update.message.reply_text(
+        "🏠 *القائمة الرئيسية*\n\nاختر ما تريد:",
+        parse_mode="Markdown",
+        reply_markup=main_menu_kb(),
+    )
+
 
 async def main_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -49,5 +61,10 @@ async def main_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await query.edit_message_text(
         "🏠 *القائمة الرئيسية*\n\nاختر ما تريد:",
         parse_mode="Markdown",
-        reply_markup=main_menu_kb()
+        reply_markup=main_menu_kb(),
     )
+
+
+# Aliases for backward compatibility
+start_handler = start_handler
+help_handler = help_handler
