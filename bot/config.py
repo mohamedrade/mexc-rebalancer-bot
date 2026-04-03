@@ -15,8 +15,11 @@ ALLOWED_USER_IDS = [
     int(i.strip()) for i in os.environ.get("ALLOWED_USER_IDS", "").split(",")
     if i.strip().isdigit()
 ]
-_db_path = os.environ.get("DATABASE_PATH", "bot.db").strip()
 
+# PostgreSQL takes priority; fall back to SQLite for local dev
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+
+_db_path = os.environ.get("DATABASE_PATH", "bot.db").strip()
 _db_dir = os.path.dirname(_db_path)
 if _db_dir and not os.path.exists(_db_dir):
     try:
@@ -35,8 +38,13 @@ class _Config:
     telegram_token = TELEGRAM_BOT_TOKEN        # backward-compatible alias
     allowed_user_ids = ALLOWED_USER_IDS
     database_path = DATABASE_PATH
+    database_url = DATABASE_URL                # PostgreSQL connection string
     quote_currency = QUOTE_CURRENCY
 
 
 config = _Config()
-print(f"[INFO] Config loaded. DB: {DATABASE_PATH} | Users: {ALLOWED_USER_IDS}", flush=True)
+
+if DATABASE_URL:
+    print(f"[INFO] Config loaded. DB: PostgreSQL | Users: {ALLOWED_USER_IDS}", flush=True)
+else:
+    print(f"[INFO] Config loaded. DB: {DATABASE_PATH} (SQLite) | Users: {ALLOWED_USER_IDS}", flush=True)
