@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from bot.database import db
-from bot.mexc_client import MexcClient
+from bot.mexc_client import MexcClient, PORTFOLIO_FETCH_TIMEOUT
 from bot.rebalancer import calculate_trades
 
 logger = logging.getLogger(__name__)
@@ -56,7 +56,7 @@ async def _do_rebalance(app, user_id: int, auto: bool = False):
     client = MexcClient(settings["mexc_api_key"], settings["mexc_secret_key"])
     try:
         try:
-            portfolio, total_usdt = await asyncio.wait_for(client.get_portfolio(), timeout=30)
+            portfolio, total_usdt = await asyncio.wait_for(client.get_portfolio(), timeout=PORTFOLIO_FETCH_TIMEOUT)
         except asyncio.TimeoutError:
             logger.warning("Auto rebalance timeout for user %s — MEXC did not respond", user_id)
             return

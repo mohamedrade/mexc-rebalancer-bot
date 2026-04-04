@@ -3,6 +3,9 @@ import ccxt.async_support as ccxt
 # Minimum USD value to consider an asset worth pricing
 _MIN_VALUE_THRESHOLD = 0.5
 
+# Timeout in seconds for all get_portfolio() calls across the app
+PORTFOLIO_FETCH_TIMEOUT = 20
+
 # Cache for market limits — shared across all instances to avoid repeated fetches
 _markets_cache: dict = {}
 

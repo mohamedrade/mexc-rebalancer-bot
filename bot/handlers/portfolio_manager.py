@@ -169,10 +169,10 @@ async def create_portfolio_start(update: Update, context: ContextTypes.DEFAULT_T
     if settings and settings.get("mexc_api_key"):
         await query.edit_message_text("⏳ جاري جلب رصيدك من MEXC...")
         try:
-            from bot.mexc_client import MexcClient
+            from bot.mexc_client import MexcClient, PORTFOLIO_FETCH_TIMEOUT
             client = MexcClient(settings["mexc_api_key"], settings["mexc_secret_key"])
             try:
-                _, total_usdt = await asyncio.wait_for(client.get_portfolio(), timeout=15)
+                _, total_usdt = await asyncio.wait_for(client.get_portfolio(), timeout=PORTFOLIO_FETCH_TIMEOUT)
                 real_balance = total_usdt
             finally:
                 await client.close()

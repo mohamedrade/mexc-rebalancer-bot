@@ -3,7 +3,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from bot.database import db
 from bot.keyboards import main_menu_kb, rebalance_confirm_kb, rebalance_dry_kb
-from bot.mexc_client import MexcClient
+from bot.mexc_client import MexcClient, PORTFOLIO_FETCH_TIMEOUT
 from bot.rebalancer import calculate_trades
 from datetime import datetime, timezone
 
@@ -39,7 +39,7 @@ async def rebalance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         client = MexcClient(settings["mexc_api_key"], settings["mexc_secret_key"])
         try:
-            portfolio, total_usdt = await asyncio.wait_for(client.get_portfolio(), timeout=20)
+            portfolio, total_usdt = await asyncio.wait_for(client.get_portfolio(), timeout=PORTFOLIO_FETCH_TIMEOUT)
         except asyncio.TimeoutError:
             await query.edit_message_text("❌ انتهت المهلة — MEXC لم يستجب. حاول مجدداً.", reply_markup=main_menu_kb())
             return
