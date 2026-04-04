@@ -5,7 +5,6 @@ SQLite (local fallback). Set DATABASE_URL env var to use PostgreSQL.
 
 import asyncio
 import logging
-import re
 from bot.config import config
 
 logger = logging.getLogger(__name__)
@@ -21,17 +20,6 @@ else:
 
 
 # ── PostgreSQL pool wrapper ────────────────────────────────────────────────────
-
-def _pg(sql: str) -> str:
-    """Convert SQLite ? placeholders to PostgreSQL $1, $2, … style."""
-    counter = 0
-
-    def _replace(_):
-        nonlocal counter
-        counter += 1
-        return f"${counter}"
-
-    return re.sub(r"\?", _replace, sql)
 
 
 class _PGConn:

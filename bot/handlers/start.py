@@ -29,6 +29,9 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    if not config.allowed_user_ids or user.id not in config.allowed_user_ids:
+        return
     await update.message.reply_text(
         "📖 *دليل الاستخدام*\n\n"
         "*إضافة العملات:*\n"
@@ -50,6 +53,9 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for /menu command."""
+    user = update.effective_user
+    if not config.allowed_user_ids or user.id not in config.allowed_user_ids:
+        return
     await update.message.reply_text(
         "🏠 *القائمة الرئيسية*\n\nاختر ما تريد:",
         parse_mode="Markdown",
@@ -65,8 +71,3 @@ async def main_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         parse_mode="Markdown",
         reply_markup=main_menu_kb(),
     )
-
-
-# Aliases for backward compatibility
-start_handler = start_handler
-help_handler = help_handler
