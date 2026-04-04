@@ -35,7 +35,7 @@ async def auto_rebalance_job(app):
             await _do_rebalance(app, user_id, auto=True)
 
         except Exception as e:
-            logger.error(f"Auto rebalance error for {user_id}: {e}")
+            logger.error("Auto rebalance error for %s: %s", user_id, e)
 
 
 async def _do_rebalance(app, user_id: int, auto: bool = False):

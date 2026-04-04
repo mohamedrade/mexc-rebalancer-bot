@@ -58,7 +58,6 @@ async def rebalance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         context.user_data["_pending_trades"] = trades
         context.user_data["_pending_portfolio_id"] = portfolio_id
-        context.user_data["_pending_total"] = effective_total
 
         portfolio_name = portfolio_info.get("name", "")
         text = (
