@@ -42,15 +42,26 @@ async def _do_rebalance(app, user_id: int, auto: bool = False):
     if not settings or not settings.get("mexc_api_key"):
         return
 
-    allocations = await db.get_allocations(user_id)
+    portfolio_id = await db.get_active_portfolio_id(user_id)
+    if not portfolio_id:
+        portfolio_id = await db.ensure_active_portfolio(user_id)
+
+    allocations = await db.get_portfolio_allocations(portfolio_id)
     if not allocations:
         return
+
+    portfolio_info = await db.get_portfolio(portfolio_id)
 
     client = MexcClient(settings["mexc_api_key"], settings["mexc_secret_key"])
     try:
         portfolio, total_usdt = await client.get_portfolio()
         threshold = settings.get("threshold", 5.0)
-        trades, _ = calculate_trades(portfolio, total_usdt, allocations, threshold)
+
+        # Respect capital_usdt if set, otherwise use full account balance
+        capital = portfolio_info.get("capital_usdt", 0.0) if portfolio_info else 0.0
+        effective_total = capital if capital > 0 else total_usdt
+
+        trades, _ = calculate_trades(portfolio, effective_total, allocations, threshold)
 
         now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 

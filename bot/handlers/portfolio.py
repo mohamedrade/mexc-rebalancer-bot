@@ -36,27 +36,31 @@ async def portfolio_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.edit_message_text("📊 المحفظة فارغة.", reply_markup=main_menu_kb())
         return
 
-    allocations = await db.get_allocations(user_id)
+    # Use active portfolio's capital if set, otherwise full account
+    portfolio_id = await db.ensure_active_portfolio(user_id)
+    portfolio_info = await db.get_portfolio(portfolio_id)
+    allocations = await db.get_portfolio_allocations(portfolio_id)
     threshold = settings.get("threshold", 5.0)
 
-    text = f"📊 *المحفظة الحالية* — ${total_usdt:,.2f}\n\n"
-    rows = sorted(portfolio.items(), key=lambda x: x[1]["value_usdt"], reverse=True)
+    capital = portfolio_info.get("capital_usdt", 0.0) if portfolio_info else 0.0
+    effective_total = capital if capital > 0 else total_usdt
 
+    portfolio_name = portfolio_info.get("name", "") if portfolio_info else ""
+    capital_line = f"💼 رأس المال المخصص: ${effective_total:,.2f}" if capital > 0 else f"🏦 إجمالي الحساب: ${total_usdt:,.2f}"
+
+    text = f"📊 *{portfolio_name}*\n{capital_line}\n\n"
+    rows = sorted(portfolio.items(), key=lambda x: x[1]["value_usdt"], reverse=True)
     alloc_map = {a["symbol"]: a["target_percentage"] for a in allocations}
 
     for sym, data in rows:
-        pct = (data["value_usdt"] / total_usdt) * 100
+        pct = (data["value_usdt"] / effective_total) * 100
         target = alloc_map.get(sym)
         bars = max(1, int(pct / 5))
         bar = "█" * bars + "░" * max(0, 20 - bars)
 
         if target is not None:
             drift = pct - target
-            status = ""
-            if abs(drift) >= threshold:
-                status = f" ⚠️{drift:+.1f}%"
-            else:
-                status = f" ✅{drift:+.1f}%"
+            status = f" ⚠️{drift:+.1f}%" if abs(drift) >= threshold else f" ✅{drift:+.1f}%"
             text += f"`{sym:6}` {bar} *{pct:.1f}%*{status}\n"
             text += f"         ${data['value_usdt']:,.1f} | هدف:{target:.1f}%\n"
         else:
@@ -64,7 +68,7 @@ async def portfolio_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
             text += f"         ${data['value_usdt']:,.1f}\n"
 
     if allocations:
-        _, drift_report = calculate_trades(portfolio, total_usdt, allocations, threshold)
+        _, drift_report = calculate_trades(portfolio, effective_total, allocations, threshold)
         needs = [d for d in drift_report if d["needs_action"]]
         text += f"\n{'⚠️ ' + str(len(needs)) + ' عملة تحتاج توازناً' if needs else '✅ المحفظة متوازنة'}"
 
