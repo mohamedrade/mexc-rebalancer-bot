@@ -147,6 +147,59 @@ async def rebalance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 # aliases for main.py compatibility
 async def execute_rebalance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Alias — execution is handled inside rebalance_callback via action='execute'."""
-    update.callback_query.data = "rebalance:execute"
-    await rebalance_callback(update, context)
+    """Alias — delegates to rebalance_callback with execute action."""
+    # CallbackQuery.data is read-only in python-telegram-bot v20,
+    # so we call the execute branch directly instead of mutating query.data.
+    query = update.callback_query
+    await query.answer()
+    user_id = update.effective_user.id
+
+    trades = context.user_data.get("_pending_trades", [])
+    if not trades:
+        await query.edit_message_text("❌ انتهت الجلسة. أعد التحقق أولاً.", reply_markup=main_menu_kb())
+        return
+
+    await query.edit_message_text("⏳ جاري تنفيذ الصفقات...")
+    settings = await db.get_settings(user_id)
+    client = MexcClient(settings["mexc_api_key"], settings["mexc_secret_key"])
+
+    try:
+        results = await client.execute_rebalance(trades)
+    except Exception as e:
+        await query.edit_message_text(
+            f"❌ خطأ أثناء التنفيذ: {str(e)[:100]}", reply_markup=main_menu_kb()
+        )
+        return
+    finally:
+        await client.close()
+
+    ok = [r for r in results if r.get("status") == "ok"]
+    err = [r for r in results if r.get("status") == "error"]
+    skip = [r for r in results if r.get("status") == "skip"]
+    total_traded = sum(
+        t["usdt_amount"] for t in trades
+        if any(r["symbol"] == t["symbol"] and r.get("status") == "ok" for r in results)
+    )
+
+    text = "✅ *اكتملت إعادة التوازن*\n\n"
+    for r in ok:
+        a = "🔴 بيع" if r["action"] == "sell" else "🟢 شراء"
+        text += f"{a} {r['symbol']}: ${r.get('usdt', 0):.2f} ✅\n"
+    for r in err:
+        text += f"❌ {r['symbol']}: {r.get('reason', 'خطأ')[:50]}\n"
+    for r in skip:
+        text += f"⏭ {r['symbol']}: {r.get('reason', 'تم التخطي')}\n"
+
+    text += f"\n📊 ناجح: {len(ok)} | خطأ: {len(err)} | تخطي: {len(skip)}"
+    text += f"\n💵 إجمالي: ${total_traded:.2f}"
+
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    summary = f"يدوي: {len(ok)} ناجح، {len(err)} خطأ"
+    portfolio_id = context.user_data.get("_pending_portfolio_id")
+    await db.add_history(user_id, now, summary, total_traded, 1 if not err else 0,
+                         portfolio_id=portfolio_id)
+
+    context.user_data.pop("_pending_trades", None)
+    context.user_data.pop("_pending_portfolio_id", None)
+    await query.edit_message_text(text, parse_mode="Markdown", reply_markup=main_menu_kb())

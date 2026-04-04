@@ -275,6 +275,12 @@ class Database:
             return row or {}
 
     async def update_portfolio(self, portfolio_id: int, **kwargs):
+        # Allowlist of columns that can be updated to prevent SQL injection
+        _ALLOWED_PORTFOLIO_COLS = {"name", "capital_usdt"}
+        for k in kwargs:
+            if k not in _ALLOWED_PORTFOLIO_COLS:
+                raise ValueError(f"Column not allowed: {k}")
+
         async with self._conn() as conn:
             for k, v in kwargs.items():
                 if _USE_PG:
@@ -438,6 +444,16 @@ class Database:
             return row or {}
 
     async def update_settings(self, user_id: int, **kwargs):
+        # Allowlist of columns that can be updated to prevent SQL injection
+        _ALLOWED_SETTINGS_COLS = {
+            "mexc_api_key", "mexc_secret_key", "threshold", "auto_enabled",
+            "auto_interval_hours", "quote_currency", "last_rebalance_at",
+            "active_portfolio_id",
+        }
+        for k in kwargs:
+            if k not in _ALLOWED_SETTINGS_COLS:
+                raise ValueError(f"Column not allowed: {k}")
+
         async with self._conn() as conn:
             if _USE_PG:
                 await conn.execute(

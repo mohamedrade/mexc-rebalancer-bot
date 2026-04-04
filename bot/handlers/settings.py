@@ -289,10 +289,16 @@ async def alloc_mode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         return ConversationHandler.END
 
     if mode == "equal":
-        pct = round(100 / len(symbols), 2)
-        alloc_dict = {s: pct for s in symbols}
-        diff = round(100 - pct * len(symbols), 2)
-        alloc_dict[symbols[-1]] = round(pct + diff, 2)
+        # Distribute evenly using integer arithmetic to avoid floating-point drift.
+        # Each coin gets base_pct, and the remainder is added to the last coin.
+        total = 10000  # work in hundredths of a percent
+        base = total // len(symbols)
+        remainder = total - base * len(symbols)
+        alloc_dict = {}
+        for i, s in enumerate(symbols):
+            cents = base + (remainder if i == len(symbols) - 1 else 0)
+            alloc_dict[s] = round(cents / 100, 2)
+        pct = alloc_dict[symbols[0]]
         context.user_data.pop("_coins", None)
         await _save_and_reply(update, user_id, alloc_dict, f"توزيع متساوٍ ({pct}% لكل عملة)")
         return ConversationHandler.END
