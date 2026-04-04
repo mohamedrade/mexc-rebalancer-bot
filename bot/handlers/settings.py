@@ -2,6 +2,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from bot.database import db
 from bot.keyboards import settings_kb, allocs_list_kb, back_to_settings_kb, main_menu_kb
+from bot.mexc_client import MexcClient
 
 # ── States ─────────────────────────────────────────────────────────────────────
 (SET_API_KEY, SET_SECRET_KEY,
@@ -142,7 +143,6 @@ async def set_secret_key_input(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("❌ انتهت الجلسة.", reply_markup=main_menu_kb())
         return ConversationHandler.END
     msg = await update.message.reply_text("⏳ جاري التحقق...")
-    from bot.mexc_client import MexcClient
     client = MexcClient(api_key, secret)
     try:
         valid, reason = await client.validate_credentials()
@@ -310,7 +310,6 @@ async def alloc_mode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             await query.edit_message_text("❌ يجب ربط MEXC API أولاً.", reply_markup=main_menu_kb())
             return ConversationHandler.END
 
-        from bot.mexc_client import MexcClient
         client = MexcClient(settings["mexc_api_key"], settings["mexc_secret_key"])
         try:
             quote = settings.get("quote_currency", "USDT")

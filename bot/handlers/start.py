@@ -2,7 +2,6 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from bot.config import config
 from bot.keyboards import main_menu_kb
-from bot.database import db
 
 
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):

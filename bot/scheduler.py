@@ -55,7 +55,12 @@ async def _do_rebalance(app, user_id: int, auto: bool = False):
 
     client = MexcClient(settings["mexc_api_key"], settings["mexc_secret_key"])
     try:
-        portfolio, total_usdt = await asyncio.wait_for(client.get_portfolio(), timeout=30)
+        try:
+            portfolio, total_usdt = await asyncio.wait_for(client.get_portfolio(), timeout=30)
+        except asyncio.TimeoutError:
+            logger.warning("Auto rebalance timeout for user %s — MEXC did not respond", user_id)
+            return
+
         threshold = settings.get("threshold", 5.0)
 
         # Respect capital_usdt if set, otherwise use full account balance
@@ -81,7 +86,6 @@ async def _do_rebalance(app, user_id: int, auto: bool = False):
         )
 
         summary = f"{'تلقائي' if auto else 'يدوي'}: {ok} ناجح، {err} خطأ"
-        portfolio_id = await db.get_active_portfolio_id(user_id)
         await db.add_history(user_id, now_str, summary, traded,
                              1 if err == 0 else 0, portfolio_id=portfolio_id)
 
