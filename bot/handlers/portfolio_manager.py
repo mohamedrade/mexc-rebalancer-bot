@@ -6,6 +6,7 @@ from bot.keyboards import (
     portfolios_list_kb, portfolio_actions_kb,
     portfolio_delete_confirm_kb, main_menu_kb,
 )
+from bot.mexc_client import MexcClient, PORTFOLIO_FETCH_TIMEOUT
 
 # Conversation states
 CREATE_NAME, CREATE_CAPITAL, EDIT_NAME, EDIT_CAPITAL = range(30, 34)
@@ -169,7 +170,6 @@ async def create_portfolio_start(update: Update, context: ContextTypes.DEFAULT_T
     if settings and settings.get("mexc_api_key"):
         await query.edit_message_text("⏳ جاري جلب رصيدك من MEXC...")
         try:
-            from bot.mexc_client import MexcClient, PORTFOLIO_FETCH_TIMEOUT
             client = MexcClient(settings["mexc_api_key"], settings["mexc_secret_key"])
             try:
                 _, total_usdt = await asyncio.wait_for(client.get_portfolio(), timeout=PORTFOLIO_FETCH_TIMEOUT)

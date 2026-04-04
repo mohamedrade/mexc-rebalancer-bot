@@ -1,3 +1,4 @@
+import re
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from bot.database import db
@@ -22,7 +23,6 @@ def _alloc_mode_kb():
 
 
 def _parse_symbols(text):
-    import re
     tokens = re.split(r"[\s,،\n]+", text.upper())
     return [t.strip() for t in tokens if t.strip() and t.strip().isalnum() and len(t.strip()) <= 20]
 
