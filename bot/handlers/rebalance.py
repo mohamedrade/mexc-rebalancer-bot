@@ -23,7 +23,6 @@ async def rebalance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
             )
             return
 
-        # Get active portfolio
         portfolio_id = await db.ensure_active_portfolio(user_id)
         portfolio_info = await db.get_portfolio(portfolio_id)
         allocations = await db.get_portfolio_allocations(portfolio_id)
@@ -31,7 +30,7 @@ async def rebalance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if not allocations:
             await query.edit_message_text(
                 f"❌ لا يوجد توزيع في محفظة *{portfolio_info.get('name', '')}*.\n"
-                "اذهب إلى ⚙️ الإعدادات ← إضافة العملات.",
+                "اذهب إلى 🛠 الإعدادات ← إضافة العملات.",
                 parse_mode="Markdown",
                 reply_markup=main_menu_kb(),
             )
@@ -49,7 +48,6 @@ async def rebalance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         finally:
             await client.close()
 
-        # Use portfolio capital as budget (if set), otherwise use full account
         capital = portfolio_info.get("capital_usdt", 0.0)
         effective_total = capital if capital > 0 else total_usdt
 
@@ -62,35 +60,45 @@ async def rebalance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         portfolio_name = portfolio_info.get("name", "")
         text = (
-            f"⚖️ *تحليل إعادة التوازن*\n"
-            f"📁 المحفظة: *{portfolio_name}*\n"
-            f"💰 رأس المال المخصص: ${effective_total:,.2f}\n"
-            f"🏦 إجمالي الحساب: ${total_usdt:,.2f}\n"
-            f"🎯 حد الانحراف: {threshold}%\n\n"
-            "📊 *تقرير الانحراف:*\n"
+            f"⚡ *تحليل إعادة التوازن*\n\n"
+            f"🗂 المحفظة: *{portfolio_name}*\n"
+            f"💰 رأس المال المخصص: `${effective_total:,.2f}`\n"
+            f"🏦 إجمالي الحساب: `${total_usdt:,.2f}`\n"
+            f"🎯 حد الانحراف: `{threshold}%`\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n"
+            "📊 *تقرير الانحراف*\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n"
         )
 
         for d in drift_report:
-            arrow = "🔴" if d["drift_pct"] > 0 else "🟢"
-            action_flag = " ← تحتاج توازن" if d["needs_action"] else ""
-            text += (
-                f"{arrow} `{d['symbol']:6}` "
-                f"الحالي:{d['current_pct']:.1f}% | الهدف:{d['target_pct']:.1f}% | "
-                f"الفرق:{d['drift_pct']:+.1f}%{action_flag}\n"
-            )
+            if d["needs_action"]:
+                arrow = "🔴" if d["drift_pct"] > 0 else "🟢"
+                text += (
+                    f"{arrow} `{d['symbol']:6}` "
+                    f"{d['current_pct']:.1f}% → {d['target_pct']:.1f}%  "
+                    f"({d['drift_pct']:+.1f}%) ⚠️\n"
+                )
+            else:
+                text += (
+                    f"✅ `{d['symbol']:6}` "
+                    f"{d['current_pct']:.1f}% → {d['target_pct']:.1f}%  "
+                    f"({d['drift_pct']:+.1f}%)\n"
+                )
 
         if not trades:
             text += "\n✅ *المحفظة متوازنة — لا حاجة لأي إجراء*"
             await query.edit_message_text(text, parse_mode="Markdown", reply_markup=rebalance_dry_kb())
             return
 
-        text += f"\n💡 *الصفقات المطلوبة ({len(trades)}):*\n"
+        text += f"\n━━━━━━━━━━━━━━━━━━━━━\n"
+        text += f"💡 *الصفقات المطلوبة  ({len(trades)})*\n"
+        text += "━━━━━━━━━━━━━━━━━━━━━\n"
         total_trade = 0
         for t in trades:
             emoji = "🔴 بيع" if t["action"] == "sell" else "🟢 شراء"
-            text += f"{emoji} {t['symbol']}: ${t['usdt_amount']:.2f}\n"
+            text += f"{emoji}  `{t['symbol']}`  ·  `${t['usdt_amount']:.2f}`\n"
             total_trade += t["usdt_amount"]
-        text += f"\n💵 إجمالي التداول: ${total_trade:.2f}"
+        text += f"\n💵 إجمالي التداول: `${total_trade:.2f}`"
 
         await query.edit_message_text(text, parse_mode="Markdown", reply_markup=rebalance_confirm_kb())
 
@@ -114,8 +122,8 @@ async def rebalance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         finally:
             await client.close()
 
-        ok = [r for r in results if r.get("status") == "ok"]
-        err = [r for r in results if r.get("status") == "error"]
+        ok   = [r for r in results if r.get("status") == "ok"]
+        err  = [r for r in results if r.get("status") == "error"]
         skip = [r for r in results if r.get("status") == "skip"]
         total_traded = sum(
             t["usdt_amount"] for t in trades
@@ -123,16 +131,18 @@ async def rebalance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
 
         text = "✅ *اكتملت إعادة التوازن*\n\n"
+        text += "━━━━━━━━━━━━━━━━━━━━━\n"
         for r in ok:
             a = "🔴 بيع" if r["action"] == "sell" else "🟢 شراء"
-            text += f"{a} {r['symbol']}: ${r.get('usdt', 0):.2f} ✅\n"
+            text += f"{a}  `{r['symbol']}`  ·  `${r.get('usdt', 0):.2f}`  ✅\n"
         for r in err:
-            text += f"❌ {r['symbol']}: {r.get('reason', 'خطأ')[:50]}\n"
+            text += f"❌  `{r['symbol']}`: {r.get('reason', 'خطأ')[:50]}\n"
         for r in skip:
-            text += f"⏭ {r['symbol']}: {r.get('reason', 'تم التخطي')}\n"
+            text += f"⏭  `{r['symbol']}`: {r.get('reason', 'تم التخطي')}\n"
 
-        text += f"\n📊 ناجح: {len(ok)} | خطأ: {len(err)} | تخطي: {len(skip)}"
-        text += f"\n💵 إجمالي: ${total_traded:.2f}"
+        text += "━━━━━━━━━━━━━━━━━━━━━\n"
+        text += f"📊 ناجح: *{len(ok)}*  |  خطأ: *{len(err)}*  |  تخطي: *{len(skip)}*\n"
+        text += f"💵 الإجمالي: `${total_traded:.2f}`"
 
         now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         summary = f"يدوي: {len(ok)} ناجح، {len(err)} خطأ"
@@ -145,11 +155,7 @@ async def rebalance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.edit_message_text(text, parse_mode="Markdown", reply_markup=main_menu_kb())
 
 
-# aliases for main.py compatibility
 async def execute_rebalance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Alias — delegates to rebalance_callback with execute action."""
-    # CallbackQuery.data is read-only in python-telegram-bot v20,
-    # so we call the execute branch directly instead of mutating query.data.
     query = update.callback_query
     await query.answer()
     user_id = update.effective_user.id
@@ -173,8 +179,8 @@ async def execute_rebalance_callback(update: Update, context: ContextTypes.DEFAU
     finally:
         await client.close()
 
-    ok = [r for r in results if r.get("status") == "ok"]
-    err = [r for r in results if r.get("status") == "error"]
+    ok   = [r for r in results if r.get("status") == "ok"]
+    err  = [r for r in results if r.get("status") == "error"]
     skip = [r for r in results if r.get("status") == "skip"]
     total_traded = sum(
         t["usdt_amount"] for t in trades
@@ -182,18 +188,19 @@ async def execute_rebalance_callback(update: Update, context: ContextTypes.DEFAU
     )
 
     text = "✅ *اكتملت إعادة التوازن*\n\n"
+    text += "━━━━━━━━━━━━━━━━━━━━━\n"
     for r in ok:
         a = "🔴 بيع" if r["action"] == "sell" else "🟢 شراء"
-        text += f"{a} {r['symbol']}: ${r.get('usdt', 0):.2f} ✅\n"
+        text += f"{a}  `{r['symbol']}`  ·  `${r.get('usdt', 0):.2f}`  ✅\n"
     for r in err:
-        text += f"❌ {r['symbol']}: {r.get('reason', 'خطأ')[:50]}\n"
+        text += f"❌  `{r['symbol']}`: {r.get('reason', 'خطأ')[:50]}\n"
     for r in skip:
-        text += f"⏭ {r['symbol']}: {r.get('reason', 'تم التخطي')}\n"
+        text += f"⏭  `{r['symbol']}`: {r.get('reason', 'تم التخطي')}\n"
 
-    text += f"\n📊 ناجح: {len(ok)} | خطأ: {len(err)} | تخطي: {len(skip)}"
-    text += f"\n💵 إجمالي: ${total_traded:.2f}"
+    text += "━━━━━━━━━━━━━━━━━━━━━\n"
+    text += f"📊 ناجح: *{len(ok)}*  |  خطأ: *{len(err)}*  |  تخطي: *{len(skip)}*\n"
+    text += f"💵 الإجمالي: `${total_traded:.2f}`"
 
-    from datetime import datetime, timezone
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     summary = f"يدوي: {len(ok)} ناجح، {len(err)} خطأ"
     portfolio_id = context.user_data.get("_pending_portfolio_id")

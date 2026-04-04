@@ -1,16 +1,33 @@
-# MEXC Portfolio Rebalancer Bot 🤖
+<div align="center">
 
-بوت تيليجرام لإعادة توازن المحفظة على منصة MEXC.
+# 🤖 MEXC Portfolio Rebalancer Bot
 
-## الميزات
-- إضافة حتى **20 عملة** دفعة واحدة
-- توزيع **متساوٍ** أو **بحسب حجم التداول السوقي** أو **يدوي**
-- **حد انحراف عام** يطبَّق على جميع العملات تلقائياً
-- إعادة توازن تلقائية بجدولة زمنية
-- إعادة توازن يدوية فورية
-- سجل كامل للعمليات
+**بوت تيليجرام لإعادة توازن المحفظة على منصة MEXC**
 
-## متغيرات البيئة على Railway
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![Telegram](https://img.shields.io/badge/Telegram-Bot-26A5E4?style=flat-square&logo=telegram&logoColor=white)](https://core.telegram.org/bots)
+[![Railway](https://img.shields.io/badge/Deploy-Railway-0B0D0E?style=flat-square&logo=railway&logoColor=white)](https://railway.app)
+[![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
+
+</div>
+
+---
+
+## ✨ الميزات
+
+| الميزة | التفاصيل |
+|--------|----------|
+| 🪙 **عملات متعددة** | حتى 20 عملة لكل محفظة |
+| ⚖️ **طرق توزيع** | متساوٍ · حسب حجم السوق · يدوي |
+| 🎯 **حد انحراف عام** | يُطبَّق تلقائياً على جميع العملات |
+| ⚡ **توازن فوري** | تنفيذ يدوي بضغطة زر |
+| 🔄 **توازن تلقائي** | جدولة زمنية مرنة (1 — 720 ساعة) |
+| 🗂 **محافظ متعددة** | رأس مال وتوزيع مستقل لكل محفظة |
+| 📋 **سجل كامل** | تتبع جميع عمليات التوازن |
+
+---
+
+## ⚙️ متغيرات البيئة
 
 | المتغير | الوصف | مثال |
 |---------|-------|------|
@@ -18,24 +35,26 @@
 | `ALLOWED_USER_IDS` | معرف تيليجرام الخاص بك | `123456789` |
 | `DATABASE_URL` | رابط PostgreSQL (للحفظ الدائم) | يُضاف تلقائياً من Railway |
 
-## إعداد قاعدة البيانات الدائمة (PostgreSQL)
+---
+
+## 🗄️ قاعدة البيانات الدائمة (PostgreSQL)
 
 البوت يستخدم SQLite افتراضياً، لكن البيانات **تُحذف عند كل إعادة تشغيل** على Railway.
-لحفظ البيانات بشكل دائم، أضف قاعدة بيانات PostgreSQL:
+لحفظ البيانات بشكل دائم:
 
 1. في لوحة Railway، افتح مشروعك
 2. اضغط **+ New** → **Database** → **Add PostgreSQL**
-3. بعد الإنشاء، اذهب إلى **Variables** في خدمة البوت
-4. أضف متغير `DATABASE_URL` وضع فيه قيمة `DATABASE_URL` من خدمة PostgreSQL
+3. اذهب إلى **Variables** في خدمة البوت
+4. أضف `DATABASE_URL` بقيمة `DATABASE_URL` من خدمة PostgreSQL
 
-Railway يوفر هذا الرابط تلقائياً عند ربط الخدمتين.
+---
 
-## طريقة إضافة العملات
-**بالرموز فقط:**
+## 📌 طريقة إضافة العملات
+
+**بالرموز فقط — ثم اختر طريقة التوزيع:**
 ```
 BTC ETH SOL USDT BNB
 ```
-ثم اختر: متساوٍ | حسب السوق | يدوي
 
 **بالنسب مباشرة:**
 ```
@@ -44,3 +63,21 @@ ETH=30
 SOL=20
 USDT=10
 ```
+
+---
+
+## 🚀 النشر على Railway
+
+```bash
+# 1. Fork المستودع
+# 2. أنشئ مشروعاً جديداً على Railway
+# 3. اربطه بالمستودع
+# 4. أضف متغيرات البيئة
+# 5. أضف PostgreSQL (اختياري)
+```
+
+---
+
+<div align="center">
+  <sub>Built with ❤️ using python-telegram-bot · ccxt · Railway</sub>
+</div>

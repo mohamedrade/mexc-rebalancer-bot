@@ -16,7 +16,7 @@ def _alloc_mode_kb():
         [InlineKeyboardButton("⚖️ توزيع متساوٍ بالكامل", callback_data="alloc_mode:equal")],
         [InlineKeyboardButton("📈 حسب حجم التداول السوقي", callback_data="alloc_mode:volume")],
         [InlineKeyboardButton("✏️ أدخل النسب يدوياً", callback_data="alloc_mode:custom")],
-        [InlineKeyboardButton("❌ إلغاء", callback_data="cancel")],
+        [InlineKeyboardButton("✖️ إلغاء", callback_data="cancel")],
     ])
 
 
@@ -60,15 +60,18 @@ async def _save_and_reply(update, user_id, alloc_dict, label, errors=None):
     total = sum(a["target_percentage"] for a in all_allocs)
     lines = []
     for a in all_allocs:
-        tag = "🆕" if a["symbol"] not in existing_syms else "✏️" if a["symbol"] in alloc_dict else "•"
+        tag = "🆕" if a["symbol"] not in existing_syms else "✏️" if a["symbol"] in alloc_dict else "◈"
         bars = max(1, int(a["target_percentage"] / 5))
         bar = "█" * bars + "░" * max(0, 20 - bars)
         lines.append(f"{tag} `{a['symbol']:6}` {bar} *{a['target_percentage']:.1f}%*")
     status = "✅ التوزيع صحيح" if abs(total - 100) < 0.5 else f"⚠️ المجموع = {total:.1f}% (يجب 100%)"
     text = (
         f"✅ *تم الحفظ — {label}*\n\n"
-        f"📊 *{len(all_allocs)} عملة:*\n" + "\n".join(lines)
-        + f"\n\n📌 المجموع: *{total:.1f}%*\n{status}"
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📊 *{len(all_allocs)} عملة:*\n"
+        + "\n".join(lines)
+        + f"\n━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📌 المجموع: *{total:.1f}%*  ·  {status}"
     )
     if errors:
         text += f"\n\n⚠️ تجاهل {len(errors)} سطر:\n" + "\n".join(errors[:3])
@@ -89,18 +92,24 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         allocs = await db.get_allocations(user_id)
         if not allocs:
             await query.edit_message_text(
-                "📊 *التوزيع*\n\nلا توجد عملات بعد.", parse_mode="Markdown",
+                "📊 *التوزيع المستهدف*\n\n"
+                "━━━━━━━━━━━━━━━━━━━━━\n"
+                "لا توجد عملات بعد.\n\n"
+                "اضغط ✏️ إضافة / تعديل عملة للبدء.",
+                parse_mode="Markdown",
                 reply_markup=back_to_settings_kb()
             )
             return
         total = sum(a["target_percentage"] for a in allocs)
-        text = f"📊 *التوزيع المستهدف ({len(allocs)} عملة)*\n\n"
+        text = f"📊 *التوزيع المستهدف  ({len(allocs)} عملة)*\n\n"
+        text += "━━━━━━━━━━━━━━━━━━━━━\n"
         for a in allocs:
             bars = max(1, int(a["target_percentage"] / 5))
             bar = "█" * bars + "░" * max(0, 20 - bars)
             text += f"`{a['symbol']:6}` {bar} *{a['target_percentage']:.1f}%*\n"
-        text += f"\n📌 المجموع: *{total:.1f}%*"
-        text += "\n✅ صحيح" if abs(total - 100) < 0.5 else f"\n⚠️ يجب 100%"
+        text += "━━━━━━━━━━━━━━━━━━━━━\n"
+        text += f"📌 المجموع: *{total:.1f}%*"
+        text += "  ·  ✅ صحيح" if abs(total - 100) < 0.5 else f"  ·  ⚠️ يجب 100%"
         await query.edit_message_text(text, parse_mode="Markdown", reply_markup=allocs_list_kb(allocs))
 
 
@@ -109,10 +118,13 @@ async def set_api_key_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     await query.edit_message_text(
-        "🔑 *مفتاح MEXC API*\n\nأرسل *Access Key*:\n\n"
-        "mexc.com ← الحساب ← API Management ← Create API\n"
+        "🔐 *ربط مفاتيح MEXC API*\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        "أرسل *Access Key* الخاص بك:\n\n"
+        "📌 mexc.com ← الحساب ← API Management ← Create API\n"
         "فعّل *Spot Trade* فقط\n\n"
-        "⚠️ سيتم حذف رسالتك تلقائياً\n\n/cancel للإلغاء",
+        "⚠️ سيتم حذف رسالتك تلقائياً للحماية\n\n"
+        "✖️ /cancel للإلغاء",
         parse_mode="Markdown",
     )
     return SET_API_KEY
@@ -125,7 +137,10 @@ async def set_api_key_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
     await update.message.reply_text(
-        "🔐 *المفتاح السري*\n\nأرسل *Secret Key*:\n\n⚠️ سيتم حذف رسالتك\n\n/cancel للإلغاء",
+        "🔐 *المفتاح السري*\n\n"
+        "أرسل *Secret Key* الخاص بك:\n\n"
+        "⚠️ سيتم حذف رسالتك تلقائياً للحماية\n\n"
+        "✖️ /cancel للإلغاء",
         parse_mode="Markdown",
     )
     return SET_SECRET_KEY
@@ -141,7 +156,7 @@ async def set_secret_key_input(update: Update, context: ContextTypes.DEFAULT_TYP
     if not api_key:
         await update.message.reply_text("❌ انتهت الجلسة.", reply_markup=main_menu_kb())
         return ConversationHandler.END
-    msg = await update.message.reply_text("⏳ جاري التحقق...")
+    msg = await update.message.reply_text("⏳ جاري التحقق من المفاتيح...")
     from bot.mexc_client import MexcClient
     client = MexcClient(api_key, secret)
     try:
@@ -151,10 +166,16 @@ async def set_secret_key_input(update: Update, context: ContextTypes.DEFAULT_TYP
     finally:
         await client.close()
     if not valid:
-        await msg.edit_text(f"❌ *فشل التحقق*\n\n{reason}", parse_mode="Markdown", reply_markup=main_menu_kb())
+        await msg.edit_text(
+            f"❌ *فشل التحقق*\n\n━━━━━━━━━━━━━━━━━━━━━\n{reason}",
+            parse_mode="Markdown", reply_markup=main_menu_kb()
+        )
         return ConversationHandler.END
     await db.update_settings(update.effective_user.id, mexc_api_key=api_key, mexc_secret_key=secret)
-    await msg.edit_text("✅ *تم ربط MEXC API بنجاح!*", parse_mode="Markdown", reply_markup=main_menu_kb())
+    await msg.edit_text(
+        "✅ *تم ربط MEXC API بنجاح!*\n\nيمكنك الآن استخدام جميع ميزات البوت.",
+        parse_mode="Markdown", reply_markup=main_menu_kb()
+    )
     return ConversationHandler.END
 
 
@@ -165,11 +186,16 @@ async def set_threshold_start(update: Update, context: ContextTypes.DEFAULT_TYPE
     settings = await db.get_settings(update.effective_user.id)
     current = settings.get("threshold", 5.0) if settings else 5.0
     await query.edit_message_text(
-        f"🎯 *حد الانحراف العام*\n\nالحالي: *{current}%*\n\n"
+        f"🎯 *حد الانحراف العام*\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        f"الحالي: *{current}%*\n\n"
         "هذه النسبة تطبَّق على *جميع العملات* تلقائياً.\n"
         "عند تجاوزها تبدأ إعادة التوازن.\n\n"
-        "• 3% حساس | 5% موصى به ✅ | 10% متسامح\n\n"
-        "أدخل رقماً بين 1 و 20:\n\n/cancel للإلغاء",
+        "  ◈ 3%  — حساس جداً\n"
+        "  ◈ 5%  — موصى به ✅\n"
+        "  ◈ 10% — متسامح\n\n"
+        "أدخل رقماً بين 1 و 20:\n\n"
+        "✖️ /cancel للإلغاء",
         parse_mode="Markdown",
     )
     return SET_THRESHOLD
@@ -185,7 +211,7 @@ async def set_threshold_input(update: Update, context: ContextTypes.DEFAULT_TYPE
         return SET_THRESHOLD
     await db.update_settings(update.effective_user.id, threshold=val)
     await update.message.reply_text(
-        f"✅ *حد الانحراف العام: {val}%*\n\nيُطبَّق على جميع العملات.",
+        f"✅ *حد الانحراف: {val}%*\n\nيُطبَّق على جميع العملات تلقائياً.",
         parse_mode="Markdown", reply_markup=main_menu_kb()
     )
     return ConversationHandler.END
@@ -198,8 +224,11 @@ async def set_interval_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
     settings = await db.get_settings(update.effective_user.id)
     current = settings.get("auto_interval_hours", 24) if settings else 24
     await query.edit_message_text(
-        f"⏰ *فترة التوازن التلقائي*\n\nالحالية: *كل {current} ساعة*\n\n"
-        "أدخل عدد الساعات (1-720):\n/cancel للإلغاء",
+        f"⏱ *فترة التوازن التلقائي*\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        f"الحالية: *كل {current} ساعة*\n\n"
+        "أدخل عدد الساعات (1 — 720):\n\n"
+        "✖️ /cancel للإلغاء",
         parse_mode="Markdown",
     )
     return SET_INTERVAL
@@ -215,7 +244,8 @@ async def set_interval_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return SET_INTERVAL
     await db.update_settings(update.effective_user.id, auto_interval_hours=val)
     await update.message.reply_text(
-        f"✅ تم تعيين الفترة: *كل {val} ساعة*", parse_mode="Markdown", reply_markup=main_menu_kb()
+        f"✅ *الفترة الزمنية: كل {val} ساعة*",
+        parse_mode="Markdown", reply_markup=main_menu_kb()
     )
     return ConversationHandler.END
 
@@ -225,15 +255,17 @@ async def set_alloc_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     allocs = await db.get_allocations(update.effective_user.id)
-    existing = ", ".join(a["symbol"] for a in allocs) if allocs else "لا يوجد"
+    existing = "  ·  ".join(f"`{a['symbol']}`" for a in allocs) if allocs else "لا يوجد"
     await query.edit_message_text(
-        f"🪙 *إضافة / تعديل العملات (حتى {MAX_COINS} عملة)*\n\n"
+        f"✏️ *إضافة / تعديل العملات*\n"
+        f"الحد الأقصى: {MAX_COINS} عملة\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n"
         f"📌 الحالية: {existing}\n\n"
         "أرسل رموز العملات مفصولة بمسافة:\n"
         "`BTC ETH SOL BNB USDT`\n\n"
         "أو بالنسب مباشرة:\n"
         "`BTC=40`\n`ETH=30`\n`SOL=20`\n`USDT=10`\n\n"
-        "/cancel للإلغاء",
+        "✖️ /cancel للإلغاء",
         parse_mode="Markdown",
     )
     return SET_ALLOC_COINS
@@ -254,7 +286,7 @@ async def set_alloc_coins_input(update: Update, context: ContextTypes.DEFAULT_TY
         existing_syms = {a["symbol"] for a in existing}
         new_syms = {s for s, _ in parsed if s not in existing_syms}
         if len(existing_syms) + len(new_syms) > MAX_COINS:
-            await update.message.reply_text(f"❌ تجاوزت الحد ({MAX_COINS} عملة).")
+            await update.message.reply_text(f"❌ تجاوزت الحد الأقصى ({MAX_COINS} عملة).")
             return SET_ALLOC_COINS
         await _save_and_reply(update, user_id, {s: p for s, p in parsed}, "يدوي", errors)
         return ConversationHandler.END
@@ -268,9 +300,11 @@ async def set_alloc_coins_input(update: Update, context: ContextTypes.DEFAULT_TY
         return SET_ALLOC_COINS
 
     context.user_data["_coins"] = symbols
-    coins_txt = " | ".join(f"`{s}`" for s in symbols)
+    coins_txt = "  ·  ".join(f"`{s}`" for s in symbols)
     await update.message.reply_text(
-        f"✅ *{len(symbols)} عملة:*\n{coins_txt}\n\n🔀 *اختر طريقة التوزيع:*",
+        f"✅ *{len(symbols)} عملة:*\n{coins_txt}\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        "🔀 *اختر طريقة التوزيع:*",
         parse_mode="Markdown", reply_markup=_alloc_mode_kb()
     )
     return SET_ALLOC_MODE
@@ -348,8 +382,11 @@ async def alloc_mode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     elif mode == "custom":
         hint = "\n".join(f"`{s}=XX`" for s in symbols)
         await query.edit_message_text(
-            f"✏️ *أدخل النسبة لكل عملة*\n\n{hint}\n\n"
-            "📌 المجموع يجب 100%\n\n/cancel للإلغاء",
+            f"✏️ *أدخل النسبة لكل عملة*\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n"
+            f"{hint}\n\n"
+            "📌 المجموع يجب أن يساوي 100%\n\n"
+            "✖️ /cancel للإلغاء",
             parse_mode="Markdown",
         )
         return SET_ALLOC_CUSTOM
@@ -377,12 +414,19 @@ async def del_alloc_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await db.delete_allocation(user_id, symbol)
     allocs = await db.get_allocations(user_id)
     if not allocs:
-        await query.edit_message_text(f"🗑 تم حذف *{symbol}*\n\nلا توجد عملات.", parse_mode="Markdown", reply_markup=back_to_settings_kb())
+        await query.edit_message_text(
+            f"🗑 تم حذف *{symbol}*\n\nلا توجد عملات متبقية.",
+            parse_mode="Markdown", reply_markup=back_to_settings_kb()
+        )
     else:
         total = sum(a["target_percentage"] for a in allocs)
-        lines = "\n".join(f"• *{a['symbol']}*: {a['target_percentage']:.1f}%" for a in allocs)
+        lines = "\n".join(f"  ◈ *{a['symbol']}*: {a['target_percentage']:.1f}%" for a in allocs)
         await query.edit_message_text(
-            f"🗑 تم حذف *{symbol}*\n\n{lines}\n\n📌 المجموع: *{total:.1f}%*",
+            f"🗑 تم حذف *{symbol}*\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n"
+            f"{lines}\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📌 المجموع: *{total:.1f}%*",
             parse_mode="Markdown", reply_markup=allocs_list_kb(allocs)
         )
 
@@ -391,7 +435,11 @@ async def clear_allocs_callback(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     await query.answer()
     await db.clear_allocations(update.effective_user.id)
-    await query.edit_message_text("🗑 تم مسح جميع التوزيعات.", reply_markup=back_to_settings_kb())
+    await query.edit_message_text(
+        "🧹 *تم مسح جميع التوزيعات*\n\nيمكنك إضافة عملات جديدة من الإعدادات.",
+        parse_mode="Markdown",
+        reply_markup=back_to_settings_kb()
+    )
 
 
 # ── Toggle Auto ────────────────────────────────────────────────────────────────
@@ -408,12 +456,19 @@ async def toggle_auto_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     threshold = settings.get("threshold", 5.0)
     interval = settings.get("auto_interval_hours", 24)
     allocs = await db.get_allocations(user_id)
+
+    api_status = "✅ API مربوطة" if has_api else "❌ API غير مربوطة"
+    alloc_status = f"📊 {len(allocs)} عملة محددة" if allocs else "📊 لا يوجد توزيع بعد"
+    auto_status = f"🟢 تلقائي كل {interval} ساعة" if auto_on else "🔴 التوازن التلقائي معطل"
+
     text = (
-        "⚙️ *الإعدادات*\n\n"
-        f"{'✅ API مربوطة' if has_api else '❌ API غير مربوطة'}\n"
-        f"{'📊 ' + str(len(allocs)) + ' عملة محددة' if allocs else '📊 لا يوجد توزيع'}\n"
-        f"🎯 حد الانحراف: *{threshold}%* (جميع العملات)\n"
-        f"{'🟢 تلقائي كل ' + str(interval) + ' ساعة' if auto_on else '🔴 التوازن التلقائي معطل'}\n"
+        "🛠 *الإعدادات*\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        f"  {api_status}\n"
+        f"  {alloc_status}\n"
+        f"  🎯 حد الانحراف: *{threshold}%*\n"
+        f"  {auto_status}\n"
+        "━━━━━━━━━━━━━━━━━━━━━"
     )
     await query.edit_message_text(text, parse_mode="Markdown", reply_markup=settings_kb(auto_on))
 
@@ -421,7 +476,7 @@ async def toggle_auto_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 # ── Cancel ─────────────────────────────────────────────────────────────────────
 async def cancel_conv(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
-    text = "❌ تم الإلغاء."
+    text = "✖️ تم الإلغاء."
     if update.callback_query:
         await update.callback_query.answer()
         await update.callback_query.edit_message_text(text, reply_markup=main_menu_kb())

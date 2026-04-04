@@ -25,20 +25,25 @@ async def handle_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         interval = settings.get("auto_interval_hours", 24) if settings else 24
         allocs = await db.get_allocations(user_id)
 
-        # Show active portfolio name
         portfolio_id = await db.get_active_portfolio_id(user_id)
         portfolio_name = ""
         if portfolio_id:
             p = await db.get_portfolio(portfolio_id)
             if p:
-                portfolio_name = f"\n📁 المحفظة النشطة: *{p['name']}*"
+                portfolio_name = f"\n🗂 المحفظة النشطة: *{p['name']}*"
+
+        api_status = "✅ API مربوطة" if has_api else "❌ API غير مربوطة"
+        alloc_status = f"📊 {len(allocs)} عملة محددة" if allocs else "📊 لا يوجد توزيع بعد"
+        auto_status = f"🟢 تلقائي كل {interval} ساعة" if auto_on else "🔴 التوازن التلقائي معطل"
 
         text = (
-            f"⚙️ *الإعدادات*{portfolio_name}\n\n"
-            f"{'✅ API مربوطة' if has_api else '❌ API غير مربوطة'}\n"
-            f"{'📊 ' + str(len(allocs)) + ' عملة محددة' if allocs else '📊 لا يوجد توزيع'}\n"
-            f"🎯 حد الانحراف: *{threshold}%*\n"
-            f"{'🟢 تلقائي كل ' + str(interval) + ' ساعة' if auto_on else '🔴 التوازن التلقائي معطل'}\n"
+            f"🛠 *الإعدادات*{portfolio_name}\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n"
+            f"  {api_status}\n"
+            f"  {alloc_status}\n"
+            f"  🎯 حد الانحراف: *{threshold}%*\n"
+            f"  {auto_status}\n"
+            "━━━━━━━━━━━━━━━━━━━━━"
         )
         await query.edit_message_text(
             text, parse_mode="Markdown", reply_markup=settings_kb(auto_on)
@@ -46,16 +51,23 @@ async def handle_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     elif action == "info":
         await query.edit_message_text(
-            "ℹ️ *كيف يعمل البوت*\n\n"
-            "1️⃣ *ربط API:* اذهب إلى الإعدادات وأدخل مفاتيح MEXC API\n\n"
-            "2️⃣ *إنشاء محفظة:* من 📁 محافظي أنشئ محفظة وحدد رأس مالها\n\n"
-            "3️⃣ *إضافة عملات:* من الإعدادات أضف العملات بنسبها\n\n"
-            "4️⃣ *إعادة التوازن:* البوت يقارن التوزيع الحالي بالمستهدف\n"
-            "   وينفذ الصفقات اللازمة لإعادة التوازن\n\n"
-            "5️⃣ *التلقائي:* فعّل التوازن التلقائي وحدد الفترة الزمنية\n\n"
-            "📁 *نظام المحافظ:*\n"
+            "💡 *كيف يعمل البوت*\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "1️⃣  *ربط API*\n"
+            "     اذهب إلى الإعدادات وأدخل مفاتيح MEXC API\n\n"
+            "2️⃣  *إنشاء محفظة*\n"
+            "     من 🗂 محافظي أنشئ محفظة وحدد رأس مالها\n\n"
+            "3️⃣  *إضافة عملات*\n"
+            "     من الإعدادات أضف العملات بنسبها المستهدفة\n\n"
+            "4️⃣  *إعادة التوازن*\n"
+            "     البوت يقارن التوزيع الحالي بالمستهدف\n"
+            "     وينفذ الصفقات اللازمة تلقائياً\n\n"
+            "5️⃣  *التوازن التلقائي*\n"
+            "     فعّله وحدد الفترة الزمنية المناسبة\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n"
+            "🗂 *نظام المحافظ المتعددة*\n\n"
             "يمكنك إنشاء محافظ متعددة بميزانيات منفصلة\n"
-            "كل محفظة لها عملاتها ونسبها المستقلة",
+            "لكل محفظة عملاتها ونسبها المستقلة تماماً",
             parse_mode="Markdown",
             reply_markup=main_menu_kb(),
         )
