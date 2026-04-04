@@ -4,7 +4,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 from bot.database import db
 from bot.keyboards import (
     portfolios_list_kb, portfolio_actions_kb,
-    portfolio_delete_confirm_kb, main_menu_kb, back_to_main_kb,
+    portfolio_delete_confirm_kb, main_menu_kb,
 )
 
 # Conversation states

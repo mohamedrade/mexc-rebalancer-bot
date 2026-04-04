@@ -34,11 +34,10 @@ QUOTE_CURRENCY = os.environ.get("QUOTE_CURRENCY", "USDT").strip()
 
 
 class _Config:
-    TELEGRAM_BOT_TOKEN = TELEGRAM_BOT_TOKEN   # accessible as config.TELEGRAM_BOT_TOKEN
-    telegram_token = TELEGRAM_BOT_TOKEN        # backward-compatible alias
+    TELEGRAM_BOT_TOKEN = TELEGRAM_BOT_TOKEN
     allowed_user_ids = ALLOWED_USER_IDS
     database_path = DATABASE_PATH
-    database_url = DATABASE_URL                # PostgreSQL connection string
+    database_url = DATABASE_URL
     quote_currency = QUOTE_CURRENCY
 
 

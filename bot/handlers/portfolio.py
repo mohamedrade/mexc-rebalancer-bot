@@ -2,7 +2,7 @@ import asyncio
 from telegram import Update
 from telegram.ext import ContextTypes
 from bot.database import db
-from bot.keyboards import main_menu_kb, back_to_main_kb
+from bot.keyboards import main_menu_kb
 from bot.mexc_client import MexcClient
 from bot.rebalancer import calculate_trades
 

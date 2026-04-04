@@ -3,7 +3,6 @@ Database layer supporting both PostgreSQL (persistent, for production) and
 SQLite (local fallback). Set DATABASE_URL env var to use PostgreSQL.
 """
 
-import asyncio
 import logging
 from bot.config import config
 
@@ -99,7 +98,6 @@ class _SQLiteConn:
 class Database:
     def __init__(self):
         self._path = config.database_path
-        self._lock = asyncio.Lock()
         self._pool = None  # PostgreSQL only
 
     def _conn(self):

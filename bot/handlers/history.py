@@ -19,8 +19,10 @@ async def history_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = "📜 *آخر 10 عمليات توازن:*\n\n"
     for h in history:
         icon = "✅" if h["success"] else "⚠️"
+        portfolio_line = f"   📁 {h['portfolio_name']}\n" if h.get("portfolio_name") else ""
         text += (
             f"{icon} `{h['timestamp']}`\n"
+            f"{portfolio_line}"
             f"   {h['summary']}\n"
             f"   💵 ${h['total_traded_usdt']:.2f}\n\n"
         )
