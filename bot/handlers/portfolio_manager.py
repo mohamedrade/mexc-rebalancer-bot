@@ -16,11 +16,8 @@ async def portfolios_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
     user_id = update.effective_user.id
 
-    portfolios = await db.get_portfolios(user_id)
     active_id = await db.ensure_active_portfolio(user_id)
-
-    if not portfolios:
-        portfolios = await db.get_portfolios(user_id)
+    portfolios = await db.get_portfolios(user_id)
 
     text = "📁 *محافظك*\n\n"
     if not portfolios:

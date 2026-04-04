@@ -7,7 +7,9 @@ from bot.database import db
 
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    if config.allowed_user_ids and user.id not in config.allowed_user_ids:
+    # Block access if user is not in the allowlist.
+    # An empty allowlist is treated as "no authorized users" to avoid accidental open access.
+    if not config.allowed_user_ids or user.id not in config.allowed_user_ids:
         await update.message.reply_text("⛔ غير مصرح لك باستخدام هذا البوت.")
         return
 

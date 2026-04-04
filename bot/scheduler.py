@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -54,7 +55,7 @@ async def _do_rebalance(app, user_id: int, auto: bool = False):
 
     client = MexcClient(settings["mexc_api_key"], settings["mexc_secret_key"])
     try:
-        portfolio, total_usdt = await client.get_portfolio()
+        portfolio, total_usdt = await asyncio.wait_for(client.get_portfolio(), timeout=30)
         threshold = settings.get("threshold", 5.0)
 
         # Respect capital_usdt if set, otherwise use full account balance

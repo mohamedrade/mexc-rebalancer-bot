@@ -3,13 +3,17 @@ import ccxt.async_support as ccxt
 # Minimum USD value to consider an asset worth pricing
 _MIN_VALUE_THRESHOLD = 0.5
 
+# Cache for market limits — shared across all instances to avoid repeated fetches
+_markets_cache: dict = {}
+
+
 class MexcClient:
     def __init__(self, api_key: str, secret: str, quote: str = "USDT"):
         self.quote = quote
         self.exchange = ccxt.mexc({
             "apiKey": api_key,
             "secret": secret,
-            "enableRateLimit": False,
+            "enableRateLimit": True,
             "timeout": 10000,  # 10s per request
             "options": {"defaultType": "spot"},
         })
@@ -73,6 +77,21 @@ class MexcClient:
 
         return portfolio, total_usdt
 
+    async def _get_min_qty_map(self, pairs: list) -> dict:
+        """Return min order quantities, using a module-level cache to avoid repeated fetches."""
+        global _markets_cache
+        missing = [p for p in pairs if p not in _markets_cache]
+        if missing:
+            try:
+                markets = await self.exchange.fetch_markets()
+                for m in markets:
+                    _markets_cache[m["symbol"]] = (
+                        m.get("limits", {}).get("amount", {}).get("min", 0) or 0
+                    )
+            except Exception:
+                pass
+        return _markets_cache
+
     async def execute_rebalance(self, trades: list) -> list:
         if not trades:
             return []
@@ -84,12 +103,7 @@ class MexcClient:
         except Exception:
             tickers = {}
 
-        try:
-            markets = await self.exchange.fetch_markets()
-            min_qty_map = {m["symbol"]: m.get("limits", {}).get("amount", {}).get("min", 0) or 0
-                           for m in markets}
-        except Exception:
-            min_qty_map = {}
+        min_qty_map = await self._get_min_qty_map(pairs)
 
         results = []
         for trade in trades:
