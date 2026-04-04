@@ -49,7 +49,37 @@ async def rebalance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await client.close()
 
         capital = portfolio_info.get("capital_usdt", 0.0)
-        effective_total = capital if capital > 0 else total_usdt
+
+        # Bug fix: never trade more than what's actually in the account.
+        # If a capital budget is set but the real balance is lower, use the real balance.
+        if capital > 0:
+            effective_total = min(capital, total_usdt)
+        else:
+            effective_total = total_usdt
+
+        # Block execution if the account is essentially empty (< $1)
+        if effective_total < 1.0:
+            await query.edit_message_text(
+                "⚠️ *رصيد غير كافٍ*\n\n"
+                f"إجمالي الحساب: `${total_usdt:.2f}`\n\n"
+                "يجب أن يكون الرصيد أكبر من $1 لتنفيذ أي عملية توازن.",
+                parse_mode="Markdown",
+                reply_markup=main_menu_kb(),
+            )
+            return
+
+        # Validate allocations sum to ~100% before proceeding
+        total_pct = sum(a["target_percentage"] for a in allocations)
+        if abs(total_pct - 100) > 1.0:
+            await query.edit_message_text(
+                "⚠️ *التوزيع غير صحيح*\n\n"
+                f"مجموع النسب الحالي: `{total_pct:.1f}%`\n"
+                "يجب أن يكون المجموع 100% قبل تنفيذ التوازن.\n\n"
+                "اذهب إلى 🛠 الإعدادات ← إضافة / تعديل عملة لتصحيح النسب.",
+                parse_mode="Markdown",
+                reply_markup=main_menu_kb(),
+            )
+            return
 
         threshold = settings.get("threshold", 5.0)
         trades, drift_report = calculate_trades(portfolio, effective_total, allocations, threshold)

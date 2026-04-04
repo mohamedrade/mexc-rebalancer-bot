@@ -57,9 +57,22 @@ async def _do_rebalance(app, user_id: int, auto: bool = False):
         portfolio, total_usdt = await client.get_portfolio()
         threshold = settings.get("threshold", 5.0)
 
-        # Respect capital_usdt if set, otherwise use full account balance
+        # Never trade more than what's actually in the account.
         capital = portfolio_info.get("capital_usdt", 0.0) if portfolio_info else 0.0
-        effective_total = capital if capital > 0 else total_usdt
+        if capital > 0:
+            effective_total = min(capital, total_usdt)
+        else:
+            effective_total = total_usdt
+
+        # Skip if account is essentially empty
+        if effective_total < 1.0:
+            return
+
+        # Skip if allocations don't sum to ~100%
+        total_pct = sum(a["target_percentage"] for a in allocations)
+        if abs(total_pct - 100) > 1.0:
+            logger.warning(f"User {user_id}: allocations sum to {total_pct:.1f}%, skipping rebalance")
+            return
 
         trades, _ = calculate_trades(portfolio, effective_total, allocations, threshold)
 

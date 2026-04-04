@@ -88,6 +88,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     user_id = update.effective_user.id
     action = query.data.split(":", 1)[1]
+
     if action == "view_allocs":
         allocs = await db.get_allocations(user_id)
         if not allocs:
@@ -111,6 +112,16 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += f"📌 المجموع: *{total:.1f}%*"
         text += "  ·  ✅ صحيح" if abs(total - 100) < 0.5 else f"  ·  ⚠️ يجب 100%"
         await query.edit_message_text(text, parse_mode="Markdown", reply_markup=allocs_list_kb(allocs))
+        return
+
+    # Fallback: unknown action — return to settings menu
+    settings = await db.get_settings(user_id)
+    auto_on = bool(settings.get("auto_enabled")) if settings else False
+    await query.edit_message_text(
+        "🛠 *الإعدادات*\n\nاختر ما تريد:",
+        parse_mode="Markdown",
+        reply_markup=settings_kb(auto_on),
+    )
 
 
 # ── API Key ────────────────────────────────────────────────────────────────────

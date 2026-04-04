@@ -182,6 +182,8 @@ class Database:
                 "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS active_portfolio_id INTEGER",
                 "ALTER TABLE allocations ADD COLUMN IF NOT EXISTS portfolio_id INTEGER",
                 "ALTER TABLE rebalance_history ADD COLUMN IF NOT EXISTS portfolio_id INTEGER",
+                "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS scalping_enabled INTEGER DEFAULT 0",
+                "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS scalping_trade_size REAL DEFAULT 10.0",
             ]:
                 try:
                     await conn.execute(sql)
@@ -234,6 +236,8 @@ class Database:
                 "ALTER TABLE user_settings ADD COLUMN active_portfolio_id INTEGER",
                 "ALTER TABLE allocations ADD COLUMN portfolio_id INTEGER",
                 "ALTER TABLE rebalance_history ADD COLUMN portfolio_id INTEGER",
+                "ALTER TABLE user_settings ADD COLUMN scalping_enabled INTEGER DEFAULT 0",
+                "ALTER TABLE user_settings ADD COLUMN scalping_trade_size REAL DEFAULT 10.0",
             ]:
                 try:
                     await conn.execute(sql)
@@ -448,7 +452,7 @@ class Database:
         _ALLOWED_SETTINGS_COLS = {
             "mexc_api_key", "mexc_secret_key", "threshold", "auto_enabled",
             "auto_interval_hours", "quote_currency", "last_rebalance_at",
-            "active_portfolio_id",
+            "active_portfolio_id", "scalping_enabled", "scalping_trade_size",
         }
         for k in kwargs:
             if k not in _ALLOWED_SETTINGS_COLS:
@@ -516,6 +520,12 @@ class Database:
         async with self._conn() as conn:
             return await conn.fetchall(
                 "SELECT user_id FROM user_settings WHERE auto_enabled=1"
+            )
+
+    async def get_all_users_with_scalping(self) -> list:
+        async with self._conn() as conn:
+            return await conn.fetchall(
+                "SELECT user_id FROM user_settings WHERE scalping_enabled=1"
             )
 
 

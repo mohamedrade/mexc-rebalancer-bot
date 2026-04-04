@@ -25,6 +25,14 @@ from bot.handlers.settings import (
     SET_THRESHOLD, SET_INTERVAL,
     SET_ALLOC_COINS, SET_ALLOC_MODE, SET_ALLOC_CUSTOM,
 )
+from bot.handlers.scalping_handler import (
+    scalping_menu_callback,
+    scalping_toggle_callback,
+    scalping_open_trades_callback,
+    scalping_settings_callback,
+    run_scalping_scan,
+    run_scalping_monitor,
+)
 from bot.handlers.portfolio_manager import (
     portfolios_callback, portfolio_detail_callback,
     switch_portfolio_callback, delete_portfolio_callback,
@@ -146,6 +154,12 @@ def build_app() -> Application:
     app.add_handler(CallbackQueryHandler(del_alloc_callback,    pattern="^del_alloc:"))
     app.add_handler(CallbackQueryHandler(clear_allocs_callback, pattern="^clear_allocs"))
 
+    # ── Scalping ───────────────────────────────────────────────────────────────
+    app.add_handler(CallbackQueryHandler(scalping_menu_callback,        pattern="^scalping:menu$"))
+    app.add_handler(CallbackQueryHandler(scalping_toggle_callback,      pattern="^scalping:toggle$"))
+    app.add_handler(CallbackQueryHandler(scalping_open_trades_callback, pattern="^scalping:open_trades$"))
+    app.add_handler(CallbackQueryHandler(scalping_settings_callback,    pattern="^scalping:settings$"))
+
     # ── Portfolio Management ───────────────────────────────────────────────────
     app.add_handler(CallbackQueryHandler(portfolios_callback,               pattern="^portfolios$"))
     app.add_handler(CallbackQueryHandler(portfolio_detail_callback,         pattern="^portfolio:\\d+$"))
@@ -160,6 +174,24 @@ async def main():
     await db.init()
     app = build_app()
     scheduler = await start_scheduler(app)
+
+    # Scalping jobs
+    scheduler.add_job(
+        run_scalping_scan,
+        trigger="interval",
+        minutes=15,
+        args=[app],
+        id="scalping_scan",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        run_scalping_monitor,
+        trigger="interval",
+        seconds=60,
+        args=[app],
+        id="scalping_monitor",
+        replace_existing=True,
+    )
     logger.info("🤖 Bot started polling...")
     async with app:
         await app.start()
