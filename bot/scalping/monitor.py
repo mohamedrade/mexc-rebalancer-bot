@@ -2,9 +2,11 @@
 Open trade monitor — runs every 60 seconds.
 
 Tracks all open scalping trades and handles:
-  - Stop loss enforcement (price polling since MEXC Spot has no native SL)
-  - Breakeven move: once target1 is hit, move SL to entry price
-  - Trade closure notification via Telegram
+  - Trailing stop: SL follows price upward at TRAIL_PCT below the highest
+    price seen since entry. SL never moves down.
+  - T1 partial exit: when price hits T1 (1.5R), sell 50% via market order
+    and tighten the trail to TRAIL_PCT_AFTER_T1 (tighter after locking profit)
+  - Trade closure: when price drops to trailing SL, market sell remainder
 """
 
 import logging
@@ -15,6 +17,9 @@ from typing import Dict, Any, List
 from bot.database import db
 
 logger = logging.getLogger(__name__)
+
+TRAIL_PCT           = 0.015   # 1.5% trail distance before T1
+TRAIL_PCT_AFTER_T1  = 0.010   # 1.0% trail distance after T1 (tighter — protect profit)
 
 
 class TradeMonitor:
@@ -29,18 +34,21 @@ class TradeMonitor:
         # MEXC Spot using quoteOrderQty for market buys)
         actual_qty      = float(result.get("filled_qty") or setup["qty"])
         actual_qty_half = float(result.get("qty_half")   or setup["qty_half"])
+        entry_price     = setup["entry_price"]
+        initial_sl      = setup["stop_loss"]
         trade = {
             "symbol":        symbol,
-            "entry_price":   setup["entry_price"],
-            "stop_loss":     setup["stop_loss"],
+            "entry_price":   entry_price,
+            "stop_loss":     initial_sl,
+            "highest_price": entry_price,   # tracks peak price for trailing
             "target1":       setup["target1"],
-            "target2":       setup["target2"],
+            "target2":       setup["target1"],  # T2 removed — trailing handles exit
             "qty":           actual_qty,
             "qty_half":      actual_qty_half,
             "risk_reward":   setup["risk_reward"],
             "t1_hit":        False,
             "t1_order_id":   result.get("target1_order", {}).get("id"),
-            "t2_order_id":   result.get("target2_order", {}).get("id"),
+            "t2_order_id":   None,   # no T2 limit order
             "opened_at":     datetime.now(timezone.utc).isoformat(),
             "breakeven":     False,
         }
@@ -64,19 +72,20 @@ class TradeMonitor:
             rows = await db.load_scalping_trades()
             for row in rows:
                 self.open_trades[row["symbol"]] = {
-                    "symbol":      row["symbol"],
-                    "entry_price": row["entry_price"],
-                    "stop_loss":   row["stop_loss"],
-                    "target1":     row["target1"],
-                    "target2":     row["target2"],
-                    "qty":         row["qty"],
-                    "qty_half":    row["qty_half"],
-                    "risk_reward": row["risk_reward"],
-                    "t1_hit":      bool(row["t1_hit"]),
-                    "t1_order_id": row["t1_order_id"],
-                    "t2_order_id": row["t2_order_id"],
-                    "opened_at":   row["opened_at"],
-                    "breakeven":   bool(row["breakeven"]),
+                    "symbol":        row["symbol"],
+                    "entry_price":   row["entry_price"],
+                    "stop_loss":     row["stop_loss"],
+                    "highest_price": row.get("highest_price") or row["entry_price"],
+                    "target1":       row["target1"],
+                    "target2":       row["target2"],
+                    "qty":           row["qty"],
+                    "qty_half":      row["qty_half"],
+                    "risk_reward":   row["risk_reward"],
+                    "t1_hit":        bool(row["t1_hit"]),
+                    "t1_order_id":   row["t1_order_id"],
+                    "t2_order_id":   row["t2_order_id"],
+                    "opened_at":     row["opened_at"],
+                    "breakeven":     bool(row["breakeven"]),
                 }
             if self.open_trades:
                 logger.info(f"Monitor: restored {len(self.open_trades)} open trade(s) from DB")
@@ -118,42 +127,71 @@ class TradeMonitor:
         bot,
         user_id: int,
     ) -> None:
-        symbol    = trade["symbol"]
-        stop_loss = trade["stop_loss"]
-        target1   = trade["target1"]
-        target2   = trade["target2"]
+        symbol  = trade["symbol"]
+        target1 = trade["target1"]
 
-        # ── Stop loss hit ──────────────────────────────────────────────────
-        if price <= stop_loss:
-            await self._close_trade(trade, price, "stop_loss", exchange, bot, user_id)
+        # ── Update trailing stop ───────────────────────────────────────────
+        # Use tighter trail after T1 is hit (profit already locked)
+        trail_pct = TRAIL_PCT_AFTER_T1 if trade["t1_hit"] else TRAIL_PCT
+
+        if price > trade["highest_price"]:
+            trade["highest_price"] = price
+            new_sl = round(price * (1 - trail_pct), 8)
+            if new_sl > trade["stop_loss"]:
+                old_sl = trade["stop_loss"]
+                trade["stop_loss"] = new_sl
+                logger.info(
+                    f"Monitor: {symbol} new high {price:.6g} — "
+                    f"SL trailed {old_sl:.6g} → {new_sl:.6g}"
+                )
+                try:
+                    await db.save_scalping_trade(user_id, trade)
+                except Exception as e:
+                    logger.error(f"Monitor: failed to update trailing SL for {symbol}: {e}")
+
+        # ── Trailing stop hit → close ──────────────────────────────────────
+        if price <= trade["stop_loss"]:
+            await self._close_trade(trade, price, "trailing_stop", exchange, bot, user_id)
             return
 
-        # ── Target 1 hit → move SL to lock-in profit (trailing) ──────────
+        # ── T1 hit → sell 50%, tighten trail ──────────────────────────────
         if not trade["t1_hit"] and price >= target1:
             trade["t1_hit"]    = True
-            # Move SL to 0.3% above entry instead of exact entry —
-            # guarantees a small profit even if price reverses after T1.
-            trailing_sl        = round(trade["entry_price"] * 1.003, 8)
-            trade["stop_loss"] = trailing_sl
             trade["breakeven"] = True
-            logger.info(f"Monitor: {symbol} hit T1 — SL trailed to {trailing_sl}")
-            # Persist updated state so it survives a restart
+
+            # Sell half position via market order
+            try:
+                await exchange.create_market_sell_order(symbol, trade["qty_half"])
+                logger.info(f"Monitor: {symbol} T1 hit — sold {trade['qty_half']} @ {price:.6g}")
+            except Exception as e:
+                logger.error(f"Monitor: T1 partial sell failed for {symbol}: {e}")
+
+            # Cancel the T1 limit order if it exists (may already be filled)
+            if trade.get("t1_order_id"):
+                try:
+                    await exchange.cancel_order(trade["t1_order_id"], symbol)
+                except Exception:
+                    pass
+
+            # Tighten trail immediately
+            new_sl = round(price * (1 - TRAIL_PCT_AFTER_T1), 8)
+            if new_sl > trade["stop_loss"]:
+                trade["stop_loss"] = new_sl
+
             try:
                 await db.save_scalping_trade(user_id, trade)
             except Exception as e:
-                logger.error(f"Monitor: failed to update trade {symbol} in DB: {e}")
+                logger.error(f"Monitor: failed to update trade {symbol} after T1: {e}")
+
+            entry  = trade["entry_price"]
+            t1_pct = ((price - entry) / entry) * 100
             await self._notify(
                 bot, user_id,
-                f"🎯 *{symbol}* — هدف 1 اتحقق!\n"
-                f"✅ ربح جزئي عند `${target1:.6g}`\n"
-                f"🔒 وقف الخسارة انتقل لـ `${trailing_sl:.6g}` (+0.3% ربح مضمون)\n"
-                f"🎯 الهدف 2: `${target2:.6g}`"
+                f"🎯 *{symbol}* — هدف 1 اتحقق!\n\n"
+                f"✅ بيع 50% عند `${price:.6g}`  (`+{t1_pct:.2f}%`)\n"
+                f"🔒 الـ trailing stop انضغط لـ `{TRAIL_PCT_AFTER_T1*100:.0f}%`\n"
+                f"📈 الباقي شغال مع الـ trailing — يلاحق السعر لأعلى"
             )
-            return
-
-        # ── Target 2 hit → full close ──────────────────────────────────────
-        if trade["t1_hit"] and price >= target2:
-            await self._close_trade(trade, price, "target2", exchange, bot, user_id)
 
     async def _close_trade(
         self,
@@ -166,7 +204,7 @@ class TradeMonitor:
     ) -> None:
         symbol = trade["symbol"]
 
-        # Cancel any remaining open limit orders
+        # Cancel any remaining open limit orders (T1 limit if not yet filled)
         for order_id in [trade.get("t1_order_id"), trade.get("t2_order_id")]:
             if order_id:
                 try:
@@ -174,38 +212,43 @@ class TradeMonitor:
                 except Exception:
                     pass
 
-        # Market sell remaining position if stop loss hit.
-        # If T1 was already hit, half the position was sold at target1,
-        # so only qty_half remains. Otherwise sell the full qty.
-        if reason == "stop_loss":
-            remaining_qty = trade["qty_half"] if trade["t1_hit"] else trade["qty"]
-            try:
-                await exchange.create_market_sell_order(symbol, remaining_qty)
-            except Exception as e:
-                logger.error(f"Monitor: emergency sell failed for {symbol}: {e}")
+        # Sell remaining position:
+        # If T1 was already hit, 50% was already sold — only qty_half remains.
+        # Otherwise sell the full qty.
+        remaining_qty = trade["qty_half"] if trade["t1_hit"] else trade["qty"]
+        try:
+            await exchange.create_market_sell_order(symbol, remaining_qty)
+        except Exception as e:
+            logger.error(f"Monitor: market sell failed for {symbol}: {e}")
 
         await self.remove_trade(symbol)
 
-        entry  = trade["entry_price"]
-        pnl    = ((price - entry) / entry) * 100
+        entry       = trade["entry_price"]
+        highest     = trade.get("highest_price", entry)
+        pnl         = ((price - entry) / entry) * 100
+        peak_pnl    = ((highest - entry) / entry) * 100
 
-        if reason == "stop_loss":
-            msg = (
-                f"🛑 *{symbol}* — وقف الخسارة\n\n"
-                f"دخول: `${entry:.6g}`\n"
-                f"خروج: `${price:.6g}`\n"
-                f"📉 خسارة: `{pnl:.2f}%`"
-            )
+        if pnl < 0:
+            result_icon = "🛑"
+            result_line = f"📉 خسارة: `{pnl:.2f}%`"
         else:
-            msg = (
-                f"✅ *{symbol}* — هدف 2 اتحقق!\n\n"
-                f"دخول: `${entry:.6g}`\n"
-                f"خروج: `${price:.6g}`\n"
-                f"📈 ربح: `+{pnl:.2f}%`\n"
-                f"📊 R/R: `{trade['risk_reward']}`"
-            )
+            result_icon = "✅"
+            result_line = f"📈 ربح: `+{pnl:.2f}%`"
 
-        logger.info(f"Monitor: {symbol} closed ({reason}) @ {price}")
+        t1_line = "✅ هدف 1 تحقق (50% بيع)" if trade["t1_hit"] else "⏳ هدف 1 لم يُحقق"
+
+        msg = (
+            f"{result_icon} *{symbol}* — Trailing Stop\n\n"
+            f"دخول:  `${entry:.6g}`\n"
+            f"أعلى:  `${highest:.6g}`  (`+{peak_pnl:.2f}%`)\n"
+            f"خروج:  `${price:.6g}`\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"{result_line}\n"
+            f"{t1_line}\n"
+            f"📊 R/R: `{trade['risk_reward']}`"
+        )
+
+        logger.info(f"Monitor: {symbol} closed ({reason}) @ {price} pnl={pnl:.2f}%")
         await self._notify(bot, user_id, msg)
 
     async def _notify(self, bot, user_id: int, text: str) -> None:

@@ -2,16 +2,14 @@
 Liquidity Sweep detection on 30M candles.
 
 A sweep occurs when a candle wicks below the 4H liquidity low and then
-closes back above it — indicating smart money grabbed stop-losses and reversed.
+closes back above it — indicating stop-losses were grabbed and price reversed.
 
-A volume spike on the sweep candle (>= 1.5x the average of prior candles)
-is required to confirm that the move was driven by real institutional activity,
-not just a thin-market wick.
+The volume spike requirement has been removed: it was filtering out too many
+valid setups. A wick below the zone that closes back above it is sufficient
+confirmation when combined with the other confluence filters (CVD + engulfing).
 """
 
 from typing import Dict, Any
-
-_VOLUME_SPIKE_MULTIPLIER = 1.5   # sweep candle volume must be >= 1.5x average
 
 
 async def detect_sweep(symbol: str, exchange, liquidity_low: float) -> Dict[str, Any]:
@@ -36,22 +34,14 @@ async def detect_sweep(symbol: str, exchange, liquidity_low: float) -> Dict[str,
 
         closed = ohlcv[:-1]   # exclude the still-forming candle
 
-        # Average volume of all closed candles (used as baseline)
-        volumes = [float(c[5]) for c in closed if float(c[5]) > 0]
-        avg_vol = sum(volumes) / len(volumes) if volumes else 0
-
         # Check the last 8 closed candles for a sweep pattern
         for candle in reversed(closed[-8:]):
             _, open_, high, low, close, vol = candle
             low   = float(low)
             close = float(close)
-            vol   = float(vol)
 
             # Wick went below the liquidity low but candle closed above it
             if low < liquidity_low and close > liquidity_low:
-                # Require a volume spike to confirm institutional activity
-                if avg_vol > 0 and vol < avg_vol * _VOLUME_SPIKE_MULTIPLIER:
-                    continue   # weak sweep — likely a fake-out, skip it
                 return {
                     "swept":     True,
                     "sweep_low": low,

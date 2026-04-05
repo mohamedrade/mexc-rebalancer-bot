@@ -183,6 +183,7 @@ class Database:
                     user_id BIGINT NOT NULL,
                     entry_price REAL,
                     stop_loss REAL,
+                    highest_price REAL,
                     target1 REAL,
                     target2 REAL,
                     qty REAL,
@@ -202,6 +203,7 @@ class Database:
                 "ALTER TABLE rebalance_history ADD COLUMN IF NOT EXISTS portfolio_id INTEGER",
                 "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS scalping_enabled INTEGER DEFAULT 0",
                 "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS scalping_trade_size REAL DEFAULT 10.0",
+                "ALTER TABLE scalping_trades ADD COLUMN IF NOT EXISTS highest_price REAL",
             ]:
                 try:
                     await conn.execute(sql)
@@ -255,6 +257,7 @@ class Database:
                     user_id INTEGER NOT NULL,
                     entry_price REAL,
                     stop_loss REAL,
+                    highest_price REAL,
                     target1 REAL,
                     target2 REAL,
                     qty REAL,
@@ -273,6 +276,7 @@ class Database:
                 "ALTER TABLE rebalance_history ADD COLUMN portfolio_id INTEGER",
                 "ALTER TABLE user_settings ADD COLUMN scalping_enabled INTEGER DEFAULT 0",
                 "ALTER TABLE user_settings ADD COLUMN scalping_trade_size REAL DEFAULT 10.0",
+                "ALTER TABLE scalping_trades ADD COLUMN highest_price REAL",
             ]:
                 try:
                     await conn.execute(sql)
@@ -567,19 +571,20 @@ class Database:
 
     async def save_scalping_trade(self, user_id: int, trade: dict) -> None:
         """Insert or replace an open scalping trade."""
+        highest = trade.get("highest_price") or trade["entry_price"]
         async with self._conn() as conn:
             if _USE_PG:
                 await conn.execute(
                     """INSERT INTO scalping_trades
-                       (symbol, user_id, entry_price, stop_loss, target1, target2,
-                        qty, qty_half, risk_reward, t1_hit, t1_order_id, t2_order_id,
-                        opened_at, breakeven)
-                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+                       (symbol, user_id, entry_price, stop_loss, highest_price,
+                        target1, target2, qty, qty_half, risk_reward,
+                        t1_hit, t1_order_id, t2_order_id, opened_at, breakeven)
+                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
                        ON CONFLICT (symbol) DO UPDATE SET
-                           stop_loss=$4, t1_hit=$10, t1_order_id=$11,
-                           t2_order_id=$12, breakeven=$14""",
+                           stop_loss=$4, highest_price=$5, t1_hit=$11,
+                           t1_order_id=$12, t2_order_id=$13, breakeven=$15""",
                     trade["symbol"], user_id,
-                    trade["entry_price"], trade["stop_loss"],
+                    trade["entry_price"], trade["stop_loss"], highest,
                     trade["target1"], trade["target2"],
                     trade["qty"], trade["qty_half"], trade["risk_reward"],
                     int(trade["t1_hit"]), trade.get("t1_order_id"),
@@ -589,13 +594,13 @@ class Database:
             else:
                 await conn.execute(
                     """INSERT OR REPLACE INTO scalping_trades
-                       (symbol, user_id, entry_price, stop_loss, target1, target2,
-                        qty, qty_half, risk_reward, t1_hit, t1_order_id, t2_order_id,
-                        opened_at, breakeven)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       (symbol, user_id, entry_price, stop_loss, highest_price,
+                        target1, target2, qty, qty_half, risk_reward,
+                        t1_hit, t1_order_id, t2_order_id, opened_at, breakeven)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         trade["symbol"], user_id,
-                        trade["entry_price"], trade["stop_loss"],
+                        trade["entry_price"], trade["stop_loss"], highest,
                         trade["target1"], trade["target2"],
                         trade["qty"], trade["qty_half"], trade["risk_reward"],
                         int(trade["t1_hit"]), trade.get("t1_order_id"),

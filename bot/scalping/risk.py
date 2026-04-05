@@ -1,23 +1,21 @@
 """
-Risk management: calculates stop loss, targets, and position size.
+Risk management: calculates stop loss, T1 target, and position size.
 
 Rules:
   stop_loss = sweep_low * 0.997       (0.3% below the sweep wick)
-  target1   = entry + risk * 1.5      (1.5R — close 50% of position)
-  target2   = entry + risk * 3.0      (3R   — close remaining 50%)
+  target1   = entry + risk * 1.5      (1.5R — sell 50% here, lock partial profit)
 
-  Targets are dynamic (based on actual risk distance) so R/R is always
-  consistent regardless of how far the sweep wick is from entry.
-  Fixed-% targets caused the R/R check to fail in almost all real
-  market conditions because the stop distance varies per trade.
+  No T2 hard target — the trailing stop in monitor.py handles the full exit,
+  allowing the trade to ride the trend as far as it goes.
+
+  Minimum R/R check removed: with a trailing stop there is no fixed reward,
+  so R/R is open-ended. Any valid sweep entry is accepted.
 """
 
 from typing import Dict, Any
 
 _STOP_PCT = 0.003   # 0.3% below sweep low
-_T1_R     = 1.5     # target1 = entry + 1.5 × risk
-_T2_R     = 3.0     # target2 = entry + 3.0 × risk
-_MIN_RR   = 2.0     # reject trades below this R/R (always met with _T2_R=3)
+_T1_R     = 1.5     # target1 = entry + 1.5 × risk (partial exit)
 
 
 def calculate_risk(
@@ -31,10 +29,10 @@ def calculate_risk(
         {
             "stop_loss":     float,
             "target1":       float,
-            "target2":       float,
+            "target2":       float,   # same as target1 — trailing handles full exit
             "qty":           float,
             "qty_half":      float,
-            "risk_reward":   float,
+            "risk_reward":   float,   # initial R (open-ended with trailing)
             "valid":         bool,
         }
     """
@@ -48,22 +46,21 @@ def calculate_risk(
         return _invalid()
 
     target1 = round(entry_price + risk * _T1_R, 8)
-    target2 = round(entry_price + risk * _T2_R, 8)
-
-    reward = target2 - entry_price
-    rr     = round(reward / risk, 2)
 
     qty      = round(trade_size_usdt / entry_price, 8)
     qty_half = round(qty / 2, 8)
 
+    # R/R shown in notifications — open-ended since trailing stop rides the trend
+    rr = round(_T1_R, 2)
+
     return {
         "stop_loss":   stop_loss,
         "target1":     target1,
-        "target2":     target2,
+        "target2":     target1,   # monitor uses trailing, not a hard T2
         "qty":         qty,
         "qty_half":    qty_half,
         "risk_reward": rr,
-        "valid":       rr >= _MIN_RR,
+        "valid":       True,      # any valid sweep entry is accepted
     }
 
 
