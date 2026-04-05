@@ -3,25 +3,21 @@ Risk management: calculates stop loss, targets, and position size.
 
 Rules:
   stop_loss = sweep_low * 0.997       (0.3% below the sweep wick)
-  target1   = entry_price * 1.005     (+0.5%  — close 50% of position)
-  target2   = entry_price * 1.015     (+1.5%  — close remaining 50%)
+  target1   = entry + risk * 1.5      (1.5R — close 50% of position)
+  target2   = entry + risk * 3.0      (3R   — close remaining 50%)
 
-  Fixed % targets are used instead of the 4H zone high because the zone
-  high is often 10-20% away — unreachable for scalping. Fixed targets
-  give a realistic, consistent R/R on every trade.
-
-  Effective R/R:
-    risk   = ~0.3%
-    reward = 1.5%
-    R/R    = 1:5
+  Targets are dynamic (based on actual risk distance) so R/R is always
+  consistent regardless of how far the sweep wick is from entry.
+  Fixed-% targets caused the R/R check to fail in almost all real
+  market conditions because the stop distance varies per trade.
 """
 
 from typing import Dict, Any
 
-_TARGET1_PCT = 0.005   # +0.5%
-_TARGET2_PCT = 0.015   # +1.5%
-_STOP_PCT    = 0.003   # 0.3% below sweep low
-_MIN_RR      = 2.0     # reject trades below this R/R
+_STOP_PCT = 0.003   # 0.3% below sweep low
+_T1_R     = 1.5     # target1 = entry + 1.5 × risk
+_T2_R     = 3.0     # target2 = entry + 3.0 × risk
+_MIN_RR   = 2.0     # reject trades below this R/R (always met with _T2_R=3)
 
 
 def calculate_risk(
@@ -45,13 +41,14 @@ def calculate_risk(
     if entry_price <= 0 or sweep_low <= 0:
         return _invalid()
 
-    stop_loss = sweep_low * (1 - _STOP_PCT)
-    target1   = entry_price * (1 + _TARGET1_PCT)
-    target2   = entry_price * (1 + _TARGET2_PCT)
+    stop_loss = round(sweep_low * (1 - _STOP_PCT), 8)
+    risk      = entry_price - stop_loss
 
-    risk = entry_price - stop_loss
     if risk <= 0:
         return _invalid()
+
+    target1 = round(entry_price + risk * _T1_R, 8)
+    target2 = round(entry_price + risk * _T2_R, 8)
 
     reward = target2 - entry_price
     rr     = round(reward / risk, 2)
@@ -60,9 +57,9 @@ def calculate_risk(
     qty_half = round(qty / 2, 8)
 
     return {
-        "stop_loss":   round(stop_loss, 8),
-        "target1":     round(target1, 8),
-        "target2":     round(target2, 8),
+        "stop_loss":   stop_loss,
+        "target1":     target1,
+        "target2":     target2,
         "qty":         qty,
         "qty_half":    qty_half,
         "risk_reward": rr,
