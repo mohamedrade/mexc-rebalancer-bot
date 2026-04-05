@@ -18,8 +18,8 @@ async def get_cvd(symbol: str, exchange) -> Dict[str, Any]:
         }
     """
     try:
-        # Fetch last 200 recent trades
-        trades = await exchange.fetch_trades(symbol, limit=200)
+        # Fetch last 500 recent trades
+        trades = await exchange.fetch_trades(symbol, limit=500)
         if not trades or len(trades) < 10:
             return {"cvd": 0.0, "trend": "neutral"}
 

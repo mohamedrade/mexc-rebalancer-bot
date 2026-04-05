@@ -203,11 +203,11 @@ async def run_scalping_scan(app) -> None:
 
                 if result["status"] == "ok":
                     await trade_monitor.add_trade(setup, result, user_id)
-                    await _send_signal(app.bot, user_id, setup)
+                    await _send_signal(app.bot, user_id, setup, executed=True)
                 else:
-                    logger.warning(
-                        f"Scalping: execute failed {setup['symbol']}: {result['reason']}"
-                    )
+                    reason = result.get("reason", "")
+                    logger.warning(f"Scalping: execute failed {setup['symbol']}: {reason}")
+                    await _send_signal(app.bot, user_id, setup, executed=False, fail_reason=reason)
 
         except Exception as e:
             logger.error(f"Scalping scan error for user {user_id}: {e}")
@@ -250,9 +250,17 @@ async def run_scalping_monitor(app) -> None:
 
 # ── Signal message ─────────────────────────────────────────────────────────────
 
-async def _send_signal(bot, user_id: int, setup: dict) -> None:
+async def _send_signal(bot, user_id: int, setup: dict, executed: bool = False, fail_reason: str = "") -> None:
     sym = setup["symbol"]
     rr  = setup["risk_reward"]
+
+    if executed:
+        exec_line = "✅ *تم تنفيذ الصفقة تلقائياً*"
+    elif fail_reason:
+        exec_line = f"⚠️ *لم يُنفَّذ:* {fail_reason[:60]}"
+    else:
+        exec_line = "📋 *إشعار فرصة — لم يُنفَّذ تلقائياً*"
+
     text = (
         f"🎯 *Smart Liquidity Flow*\n\n"
         f"📌 `{sym}`\n"
@@ -266,7 +274,8 @@ async def _send_signal(bot, user_id: int, setup: dict) -> None:
         f"━━━━━━━━━━━━━━━━━━━━━\n"
         f"💧 Liquidity Sweep ✅\n"
         f"📈 CVD صاعد ✅\n"
-        f"🕯 Engulfing 15M ✅"
+        f"🕯 Engulfing 15M ✅\n\n"
+        f"{exec_line}"
     )
     try:
         await bot.send_message(user_id, text, parse_mode="Markdown")

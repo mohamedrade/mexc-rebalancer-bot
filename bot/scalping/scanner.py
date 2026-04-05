@@ -1,7 +1,7 @@
 """
 Market scanner — runs every 15 minutes.
 
-Scans Top 100 MEXC symbols filtered by volume and spread,
+Scans top MEXC symbols filtered by volume, spread, and volatility,
 applies the full Smart Liquidity Flow confluence check,
 and returns a list of valid trade setups.
 """
@@ -17,12 +17,14 @@ from bot.scalping.risk     import calculate_risk
 
 logger = logging.getLogger(__name__)
 
-MIN_VOLUME_24H = 1_000_000   # $1M minimum
-MAX_SPREAD_PCT = 0.1          # 0.1% maximum
+MIN_VOLUME_24H  = 500_000   # $500K minimum 24h volume
+MAX_SPREAD_PCT  = 0.2       # 0.2% maximum spread
+MIN_VOLATILITY  = 0.5       # minimum 24h price range % — flat coins not worth scalping
+MAX_SETUPS      = 3         # cap signals per scan to avoid overtrading
 
 
-async def get_top_symbols(exchange, limit: int = 100) -> List[str]:
-    """Return top symbols by 24h quote volume, filtered by spread."""
+async def get_top_symbols(exchange, limit: int = 200) -> List[str]:
+    """Return top symbols by 24h quote volume, filtered by spread and volatility."""
     try:
         tickers = await exchange.fetch_tickers()
         usdt_pairs = {
@@ -30,23 +32,31 @@ async def get_top_symbols(exchange, limit: int = 100) -> List[str]:
             if sym.endswith("/USDT") and t.get("quoteVolume")
         }
 
-        # Filter by minimum volume
-        filtered = {
-            sym: t for sym, t in usdt_pairs.items()
-            if float(t.get("quoteVolume") or 0) >= MIN_VOLUME_24H
-        }
-
-        # Filter by spread
         valid = []
-        for sym, t in filtered.items():
+        for sym, t in usdt_pairs.items():
+            volume = float(t.get("quoteVolume") or 0)
+            if volume < MIN_VOLUME_24H:
+                continue
+
             bid = float(t.get("bid") or 0)
             ask = float(t.get("ask") or 0)
-            if bid > 0 and ask > 0:
-                spread_pct = ((ask - bid) / bid) * 100
-                if spread_pct <= MAX_SPREAD_PCT:
-                    valid.append((sym, float(t["quoteVolume"])))
+            if bid <= 0 or ask <= 0:
+                continue
 
-        # Sort by volume descending, take top N
+            spread_pct = ((ask - bid) / bid) * 100
+            if spread_pct > MAX_SPREAD_PCT:
+                continue
+
+            # Volatility filter: skip coins that barely moved in 24h
+            high_24h = float(t.get("high") or 0)
+            low_24h  = float(t.get("low") or 0)
+            if high_24h > 0 and low_24h > 0:
+                volatility = ((high_24h - low_24h) / low_24h) * 100
+                if volatility < MIN_VOLATILITY:
+                    continue
+
+            valid.append((sym, volume))
+
         valid.sort(key=lambda x: x[1], reverse=True)
         return [sym for sym, _ in valid[:limit]]
 
@@ -69,12 +79,15 @@ async def scan(
         trade_size_usdt: USDT amount per trade
 
     Returns:
-        List of valid setups, each dict contains all info needed by executor.
+        List of valid setups (capped at MAX_SETUPS per scan).
     """
     symbols = await get_top_symbols(exchange)
     setups  = []
 
     for symbol in symbols:
+        if len(setups) >= MAX_SETUPS:
+            break
+
         # Skip if already in a trade
         if symbol in open_symbols:
             continue
@@ -100,7 +113,7 @@ async def scan(
             if not entry["confirmed"]:
                 continue
 
-            # ── Step 5: Risk calculation ───────────────────────────────────
+            # ── Step 5: Risk / R/R validation ─────────────────────────────
             risk = calculate_risk(
                 entry_price     = entry["entry_price"],
                 sweep_low       = sweep["sweep_low"],

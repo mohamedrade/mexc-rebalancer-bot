@@ -36,8 +36,8 @@ async def get_liquidity_zones(symbol: str, exchange) -> Dict[str, Any]:
         if current <= 0:
             return _empty_result()
 
-        near_low  = current <= zone_low  * 1.005   # within 0.5% above low
-        near_high = current >= zone_high * 0.995   # within 0.5% below high
+        near_low  = current <= zone_low  * 1.02   # within 2% above low
+        near_high = current >= zone_high * 0.98   # within 2% below high
 
         if near_low:
             side = "buy"

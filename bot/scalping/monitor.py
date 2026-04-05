@@ -124,13 +124,16 @@ class TradeMonitor:
             await self._close_trade(trade, price, "stop_loss", exchange, bot, user_id)
             return
 
-        # ── Target 1 hit → move SL to breakeven ───────────────────────────
+        # ── Target 1 hit → move SL to lock-in profit (trailing) ──────────
         if not trade["t1_hit"] and price >= target1:
             trade["t1_hit"]    = True
-            trade["stop_loss"] = trade["entry_price"]   # breakeven
+            # Move SL to 0.3% above entry instead of exact entry —
+            # guarantees a small profit even if price reverses after T1.
+            trailing_sl        = round(trade["entry_price"] * 1.003, 8)
+            trade["stop_loss"] = trailing_sl
             trade["breakeven"] = True
-            logger.info(f"Monitor: {symbol} hit T1 — SL moved to breakeven {trade['entry_price']}")
-            # Persist updated state so breakeven survives a restart
+            logger.info(f"Monitor: {symbol} hit T1 — SL trailed to {trailing_sl}")
+            # Persist updated state so it survives a restart
             try:
                 await db.save_scalping_trade(user_id, trade)
             except Exception as e:
@@ -139,7 +142,7 @@ class TradeMonitor:
                 bot, user_id,
                 f"🎯 *{symbol}* — هدف 1 اتحقق!\n"
                 f"✅ ربح جزئي عند `${target1:.6g}`\n"
-                f"🔒 وقف الخسارة انتقل للدخول (Breakeven)\n"
+                f"🔒 وقف الخسارة انتقل لـ `${trailing_sl:.6g}` (+0.3% ربح مضمون)\n"
                 f"🎯 الهدف 2: `${target2:.6g}`"
             )
             return
