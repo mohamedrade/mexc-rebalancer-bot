@@ -229,6 +229,33 @@ async def run_scalping_scan(app) -> None:
             trade_size = float(settings.get("scalping_trade_size", 10.0))
             client = MexcClient(settings["mexc_api_key"], settings["mexc_secret_key"])
 
+            # ── Pre-scan balance check ─────────────────────────────────────
+            try:
+                _, usdt_balance = await asyncio.wait_for(
+                    client.get_portfolio(), timeout=15
+                )
+            except asyncio.TimeoutError:
+                logger.warning(f"Scalping: balance check timed out for user {user_id}")
+                continue
+            except Exception as e:
+                logger.warning(f"Scalping: balance check failed for user {user_id}: {e}")
+                continue
+
+            if usdt_balance < trade_size:
+                await app.bot.send_message(
+                    user_id,
+                    f"⚠️ *Scalping — رصيد غير كافٍ*\n\n"
+                    f"رصيدك الحالي: `${usdt_balance:.2f} USDT`\n"
+                    f"حجم الصفقة المطلوب: `${trade_size:.0f} USDT`\n\n"
+                    f"أضف رصيداً أو قلّل حجم الصفقة بـ `/scalping_size`",
+                    parse_mode="Markdown",
+                )
+                logger.warning(
+                    f"Scalping: skipping scan for user {user_id} — "
+                    f"balance ${usdt_balance:.2f} < trade_size ${trade_size:.0f}"
+                )
+                continue
+
             try:
                 setups = await asyncio.wait_for(
                     scan(client.exchange, trade_monitor.open_symbols, trade_size),
@@ -290,14 +317,50 @@ async def run_scalping_monitor(app) -> None:
 
 # ── Signal message ─────────────────────────────────────────────────────────────
 
-async def _send_signal(bot, user_id: int, setup: dict, executed: bool = False, fail_reason: str = "") -> None:
-    sym = setup["symbol"]
-    rr  = setup["risk_reward"]
+def _translate_error(reason: str) -> str:
+    """Convert common MEXC/ccxt English errors to readable Arabic."""
+    r = reason.lower()
+    if "insufficient" in r or "balance" in r or "not enough" in r:
+        return "رصيد غير كافٍ في حسابك"
+    if "minimum" in r or "min" in r or "too small" in r:
+        return "المبلغ أقل من الحد الأدنى المسموح"
+    if "invalid" in r and ("symbol" in r or "pair" in r):
+        return "رمز العملة غير مدعوم"
+    if "auth" in r or "api" in r or "key" in r or "signature" in r:
+        return "خطأ في مفاتيح API — تحقق من الإعدادات"
+    if "timeout" in r or "timed out" in r:
+        return "انتهت المهلة — MEXC لم يستجب"
+    if "rate limit" in r or "too many" in r:
+        return "تجاوزت حد الطلبات — حاول لاحقاً"
+    if "market" in r and "close" in r:
+        return "السوق مغلق مؤقتاً"
+    # Fallback: return first 60 chars as-is
+    return reason[:60]
+
+
+async def _send_signal(
+    bot,
+    user_id: int,
+    setup: dict,
+    executed: bool = False,
+    fail_reason: str = "",
+) -> None:
+    sym   = setup["symbol"]
+    rr    = setup["risk_reward"]
+    entry = setup["entry_price"]
+    t1    = setup["target1"]
+    t2    = setup["target2"]
+    sl    = setup["stop_loss"]
+
+    # Calculate actual % distances from entry
+    t1_pct = ((t1 / entry) - 1) * 100 if entry > 0 else 0
+    t2_pct = ((t2 / entry) - 1) * 100 if entry > 0 else 0
+    sl_pct = ((sl / entry) - 1) * 100 if entry > 0 else 0
 
     if executed:
         exec_line = "✅ *تم تنفيذ الصفقة تلقائياً*"
     elif fail_reason:
-        exec_line = f"⚠️ *لم يُنفَّذ:* {fail_reason[:60]}"
+        exec_line = f"⚠️ *لم يُنفَّذ:* {_translate_error(fail_reason)}"
     else:
         exec_line = "📋 *إشعار فرصة — لم يُنفَّذ تلقائياً*"
 
@@ -306,10 +369,10 @@ async def _send_signal(bot, user_id: int, setup: dict, executed: bool = False, f
         f"📌 `{sym}`\n"
         f"⏱ التقاطع: 4H + 1H + 30M + 15M\n\n"
         f"━━━━━━━━━━━━━━━━━━━━━\n"
-        f"🟢 دخول  : `${setup['entry_price']:.6g}`\n"
-        f"🎯 هدف 1 : `${setup['target1']:.6g}`  (+0.5%)\n"
-        f"🎯 هدف 2 : `${setup['target2']:.6g}`\n"
-        f"🛑 وقف   : `${setup['stop_loss']:.6g}`  (-0.3%)\n"
+        f"🟢 دخول  : `${entry:.6g}`\n"
+        f"🎯 هدف 1 : `${t1:.6g}`  (`+{t1_pct:.2f}%`)\n"
+        f"🎯 هدف 2 : `${t2:.6g}`  (`+{t2_pct:.2f}%`)\n"
+        f"🛑 وقف   : `${sl:.6g}`  (`{sl_pct:.2f}%`)\n"
         f"📊 R/R   : `1:{rr}`\n\n"
         f"━━━━━━━━━━━━━━━━━━━━━\n"
         f"💧 Liquidity Sweep ✅\n"
