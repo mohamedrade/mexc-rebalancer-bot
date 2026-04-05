@@ -30,6 +30,7 @@ from bot.handlers.scalping_handler import (
     scalping_toggle_callback,
     scalping_open_trades_callback,
     scalping_settings_callback,
+    scalping_size_command,
     run_scalping_scan,
     run_scalping_monitor,
 )
@@ -140,6 +141,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("start", start_handler))
     app.add_handler(CommandHandler("help", help_handler))
     app.add_handler(CommandHandler("menu", menu_command))
+    app.add_handler(CommandHandler("scalping_size", scalping_size_command))
 
     # ── Navigation ─────────────────────────────────────────────────────────────
     app.add_handler(CallbackQueryHandler(handle_menu_callback, pattern="^menu:"))

@@ -25,14 +25,18 @@ class TradeMonitor:
     async def add_trade(self, setup: Dict[str, Any], result: Dict[str, Any], user_id: int) -> None:
         """Register a newly executed trade and persist it to the database."""
         symbol = setup["symbol"]
+        # Use actual filled qty from executor (may differ from estimated qty due to
+        # MEXC Spot using quoteOrderQty for market buys)
+        actual_qty      = float(result.get("filled_qty") or setup["qty"])
+        actual_qty_half = float(result.get("qty_half")   or setup["qty_half"])
         trade = {
             "symbol":        symbol,
             "entry_price":   setup["entry_price"],
             "stop_loss":     setup["stop_loss"],
             "target1":       setup["target1"],
             "target2":       setup["target2"],
-            "qty":           setup["qty"],
-            "qty_half":      setup["qty_half"],
+            "qty":           actual_qty,
+            "qty_half":      actual_qty_half,
             "risk_reward":   setup["risk_reward"],
             "t1_hit":        False,
             "t1_order_id":   result.get("target1_order", {}).get("id"),

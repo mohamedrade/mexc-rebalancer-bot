@@ -19,6 +19,9 @@ from bot.scalping.scanner import scan
 from bot.scalping.executor import execute_trade
 from bot.scalping.monitor import trade_monitor
 
+_MIN_TRADE_SIZE = 5.0
+_MAX_TRADE_SIZE = 10_000.0
+
 logger = logging.getLogger(__name__)
 
 # ── Keyboards ──────────────────────────────────────────────────────────────────
@@ -162,6 +165,43 @@ async def scalping_settings_callback(update: Update, context: ContextTypes.DEFAU
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("◀️ رجوع", callback_data="scalping:menu")]
         ]),
+    )
+
+
+# ── /scalping_size command ────────────────────────────────────────────────────
+
+async def scalping_size_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Usage: /scalping_size 20"""
+    user_id = update.effective_user.id
+    args = context.args
+
+    if not args:
+        sc = await _get_scalping_settings(user_id)
+        await update.message.reply_text(
+            f"⚙️ حجم الصفقة الحالي: `${sc['trade_size']:.0f}`\n\n"
+            f"لتغييره: `/scalping_size <المبلغ>`\n"
+            f"مثال: `/scalping_size 20`\n\n"
+            f"الحد الأدنى: ${_MIN_TRADE_SIZE:.0f}  ·  الحد الأقصى: ${_MAX_TRADE_SIZE:,.0f}",
+            parse_mode="Markdown",
+        )
+        return
+
+    try:
+        size = float(args[0])
+    except ValueError:
+        await update.message.reply_text("❌ أدخل رقماً صحيحاً. مثال: `/scalping_size 20`", parse_mode="Markdown")
+        return
+
+    if size < _MIN_TRADE_SIZE or size > _MAX_TRADE_SIZE:
+        await update.message.reply_text(
+            f"❌ يجب أن يكون المبلغ بين ${_MIN_TRADE_SIZE:.0f} و ${_MAX_TRADE_SIZE:,.0f}",
+        )
+        return
+
+    await db.update_settings(user_id, scalping_trade_size=size)
+    await update.message.reply_text(
+        f"✅ تم تغيير حجم الصفقة إلى `${size:.0f}` USDT",
+        parse_mode="Markdown",
     )
 
 

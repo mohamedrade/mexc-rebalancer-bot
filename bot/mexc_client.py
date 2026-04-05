@@ -106,17 +106,17 @@ class MexcClient:
                 if not price:
                     raise ValueError("تعذّر جلب السعر")
 
-                qty = usdt_amt / price
-                min_qty = min_qty_map.get(pair, 0)
-                if qty < min_qty:
-                    results.append({"symbol": sym, "action": action, "status": "skip",
-                                    "reason": f"الكمية أقل من الحد ({min_qty})"})
-                    continue
-
                 if action == "sell":
+                    qty = usdt_amt / price
+                    min_qty = min_qty_map.get(pair, 0)
+                    if qty < min_qty:
+                        results.append({"symbol": sym, "action": action, "status": "skip",
+                                        "reason": f"الكمية أقل من الحد ({min_qty})"})
+                        continue
                     order = await self.exchange.create_market_sell_order(pair, qty)
                 else:
-                    order = await self.exchange.create_market_buy_order(pair, qty)
+                    # MEXC Spot market buy requires quoteOrderQty (USDT amount), not base qty
+                    order = await self.exchange.create_market_buy_order_with_cost(pair, usdt_amt)
 
                 results.append({"symbol": sym, "action": action, "status": "ok",
                                 "usdt": usdt_amt, "price": price, "order_id": order.get("id")})
