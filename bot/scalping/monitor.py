@@ -12,6 +12,8 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Dict, Any, List
 
+from bot.database import db
+
 logger = logging.getLogger(__name__)
 
 
@@ -20,10 +22,10 @@ class TradeMonitor:
         # open_trades: {symbol: trade_dict}
         self.open_trades: Dict[str, Dict[str, Any]] = {}
 
-    def add_trade(self, setup: Dict[str, Any], result: Dict[str, Any]) -> None:
-        """Register a newly executed trade for monitoring."""
+    async def add_trade(self, setup: Dict[str, Any], result: Dict[str, Any], user_id: int) -> None:
+        """Register a newly executed trade and persist it to the database."""
         symbol = setup["symbol"]
-        self.open_trades[symbol] = {
+        trade = {
             "symbol":        symbol,
             "entry_price":   setup["entry_price"],
             "stop_loss":     setup["stop_loss"],
@@ -32,16 +34,50 @@ class TradeMonitor:
             "qty":           setup["qty"],
             "qty_half":      setup["qty_half"],
             "risk_reward":   setup["risk_reward"],
-            "t1_hit":        False,       # True after target1 is reached
+            "t1_hit":        False,
             "t1_order_id":   result.get("target1_order", {}).get("id"),
             "t2_order_id":   result.get("target2_order", {}).get("id"),
             "opened_at":     datetime.now(timezone.utc).isoformat(),
-            "breakeven":     False,       # True after SL moved to entry
+            "breakeven":     False,
         }
+        self.open_trades[symbol] = trade
+        try:
+            await db.save_scalping_trade(user_id, trade)
+        except Exception as e:
+            logger.error(f"Monitor: failed to persist trade {symbol}: {e}")
         logger.info(f"Monitor: tracking {symbol}")
 
-    def remove_trade(self, symbol: str) -> None:
+    async def remove_trade(self, symbol: str) -> None:
         self.open_trades.pop(symbol, None)
+        try:
+            await db.delete_scalping_trade(symbol)
+        except Exception as e:
+            logger.error(f"Monitor: failed to delete trade {symbol} from DB: {e}")
+
+    async def load_from_db(self) -> None:
+        """Restore open trades from DB after a restart."""
+        try:
+            rows = await db.load_scalping_trades()
+            for row in rows:
+                self.open_trades[row["symbol"]] = {
+                    "symbol":      row["symbol"],
+                    "entry_price": row["entry_price"],
+                    "stop_loss":   row["stop_loss"],
+                    "target1":     row["target1"],
+                    "target2":     row["target2"],
+                    "qty":         row["qty"],
+                    "qty_half":    row["qty_half"],
+                    "risk_reward": row["risk_reward"],
+                    "t1_hit":      bool(row["t1_hit"]),
+                    "t1_order_id": row["t1_order_id"],
+                    "t2_order_id": row["t2_order_id"],
+                    "opened_at":   row["opened_at"],
+                    "breakeven":   bool(row["breakeven"]),
+                }
+            if self.open_trades:
+                logger.info(f"Monitor: restored {len(self.open_trades)} open trade(s) from DB")
+        except Exception as e:
+            logger.error(f"Monitor: failed to load trades from DB: {e}")
 
     @property
     def open_symbols(self) -> set:
@@ -94,6 +130,11 @@ class TradeMonitor:
             trade["stop_loss"] = trade["entry_price"]   # breakeven
             trade["breakeven"] = True
             logger.info(f"Monitor: {symbol} hit T1 — SL moved to breakeven {trade['entry_price']}")
+            # Persist updated state so breakeven survives a restart
+            try:
+                await db.save_scalping_trade(user_id, trade)
+            except Exception as e:
+                logger.error(f"Monitor: failed to update trade {symbol} in DB: {e}")
             await self._notify(
                 bot, user_id,
                 f"🎯 *{symbol}* — هدف 1 اتحقق!\n"
@@ -126,14 +167,17 @@ class TradeMonitor:
                 except Exception:
                     pass
 
-        # Market sell remaining position if stop loss hit
+        # Market sell remaining position if stop loss hit.
+        # If T1 was already hit, half the position was sold at target1,
+        # so only qty_half remains. Otherwise sell the full qty.
         if reason == "stop_loss":
+            remaining_qty = trade["qty_half"] if trade["t1_hit"] else trade["qty"]
             try:
-                await exchange.create_market_sell_order(symbol, trade["qty"])
+                await exchange.create_market_sell_order(symbol, remaining_qty)
             except Exception as e:
                 logger.error(f"Monitor: emergency sell failed for {symbol}: {e}")
 
-        self.remove_trade(symbol)
+        await self.remove_trade(symbol)
 
         entry  = trade["entry_price"]
         pnl    = ((price - entry) / entry) * 100

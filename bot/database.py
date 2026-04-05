@@ -177,6 +177,24 @@ class Database:
                     total_traded_usdt REAL,
                     success INTEGER DEFAULT 1
                 )""")
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS scalping_trades (
+                    symbol TEXT PRIMARY KEY,
+                    user_id BIGINT NOT NULL,
+                    entry_price REAL,
+                    stop_loss REAL,
+                    target1 REAL,
+                    target2 REAL,
+                    qty REAL,
+                    qty_half REAL,
+                    risk_reward REAL,
+                    t1_hit INTEGER DEFAULT 0,
+                    t1_order_id TEXT,
+                    t2_order_id TEXT,
+                    opened_at TEXT,
+                    breakeven INTEGER DEFAULT 0
+                )"""
+            )
             # Safe migrations
             for sql in [
                 "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS active_portfolio_id INTEGER",
@@ -230,6 +248,23 @@ class Database:
                     summary TEXT,
                     total_traded_usdt REAL,
                     success INTEGER DEFAULT 1
+                )""")
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS scalping_trades (
+                    symbol TEXT PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    entry_price REAL,
+                    stop_loss REAL,
+                    target1 REAL,
+                    target2 REAL,
+                    qty REAL,
+                    qty_half REAL,
+                    risk_reward REAL,
+                    t1_hit INTEGER DEFAULT 0,
+                    t1_order_id TEXT,
+                    t2_order_id TEXT,
+                    opened_at TEXT,
+                    breakeven INTEGER DEFAULT 0
                 )""")
             await conn.commit()
             for sql in [
@@ -527,6 +562,64 @@ class Database:
             return await conn.fetchall(
                 "SELECT user_id FROM user_settings WHERE scalping_enabled=1"
             )
+
+    # ── Scalping Trades persistence ────────────────────────────────────────────
+
+    async def save_scalping_trade(self, user_id: int, trade: dict) -> None:
+        """Insert or replace an open scalping trade."""
+        async with self._conn() as conn:
+            if _USE_PG:
+                await conn.execute(
+                    """INSERT INTO scalping_trades
+                       (symbol, user_id, entry_price, stop_loss, target1, target2,
+                        qty, qty_half, risk_reward, t1_hit, t1_order_id, t2_order_id,
+                        opened_at, breakeven)
+                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+                       ON CONFLICT (symbol) DO UPDATE SET
+                           stop_loss=$4, t1_hit=$10, t1_order_id=$11,
+                           t2_order_id=$12, breakeven=$14""",
+                    trade["symbol"], user_id,
+                    trade["entry_price"], trade["stop_loss"],
+                    trade["target1"], trade["target2"],
+                    trade["qty"], trade["qty_half"], trade["risk_reward"],
+                    int(trade["t1_hit"]), trade.get("t1_order_id"),
+                    trade.get("t2_order_id"), trade["opened_at"],
+                    int(trade["breakeven"]),
+                )
+            else:
+                await conn.execute(
+                    """INSERT OR REPLACE INTO scalping_trades
+                       (symbol, user_id, entry_price, stop_loss, target1, target2,
+                        qty, qty_half, risk_reward, t1_hit, t1_order_id, t2_order_id,
+                        opened_at, breakeven)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        trade["symbol"], user_id,
+                        trade["entry_price"], trade["stop_loss"],
+                        trade["target1"], trade["target2"],
+                        trade["qty"], trade["qty_half"], trade["risk_reward"],
+                        int(trade["t1_hit"]), trade.get("t1_order_id"),
+                        trade.get("t2_order_id"), trade["opened_at"],
+                        int(trade["breakeven"]),
+                    ),
+                )
+                await conn.commit()
+
+    async def delete_scalping_trade(self, symbol: str) -> None:
+        """Remove a closed scalping trade."""
+        async with self._conn() as conn:
+            if _USE_PG:
+                await conn.execute(
+                    "DELETE FROM scalping_trades WHERE symbol=$1", symbol)
+            else:
+                await conn.execute(
+                    "DELETE FROM scalping_trades WHERE symbol=?", (symbol,))
+                await conn.commit()
+
+    async def load_scalping_trades(self) -> list:
+        """Return all open scalping trades (used on startup to restore state)."""
+        async with self._conn() as conn:
+            return await conn.fetchall("SELECT * FROM scalping_trades")
 
 
 db = Database()

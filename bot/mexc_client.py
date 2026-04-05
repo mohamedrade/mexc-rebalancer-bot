@@ -9,7 +9,7 @@ class MexcClient:
         self.exchange = ccxt.mexc({
             "apiKey": api_key,
             "secret": secret,
-            "enableRateLimit": False,
+            "enableRateLimit": True,
             "timeout": 10000,  # 10s per request
             "options": {"defaultType": "spot"},
         })

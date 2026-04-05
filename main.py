@@ -44,6 +44,7 @@ from bot.handlers.portfolio_manager import (
     CREATE_NAME, CREATE_CAPITAL, EDIT_NAME, EDIT_CAPITAL,
 )
 from bot.scheduler import start_scheduler
+from bot.scalping.monitor import trade_monitor
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -172,6 +173,7 @@ def build_app() -> Application:
 
 async def main():
     await db.init()
+    await trade_monitor.load_from_db()
     app = build_app()
     scheduler = await start_scheduler(app)
 
