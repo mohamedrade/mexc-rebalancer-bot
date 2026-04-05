@@ -242,14 +242,6 @@ async def run_scalping_scan(app) -> None:
                 continue
 
             if usdt_balance < trade_size:
-                await app.bot.send_message(
-                    user_id,
-                    f"⚠️ *Scalping — رصيد غير كافٍ*\n\n"
-                    f"رصيدك الحالي: `${usdt_balance:.2f} USDT`\n"
-                    f"حجم الصفقة المطلوب: `${trade_size:.0f} USDT`\n\n"
-                    f"أضف رصيداً أو قلّل حجم الصفقة بـ `/scalping_size`",
-                    parse_mode="Markdown",
-                )
                 logger.warning(
                     f"Scalping: skipping scan for user {user_id} — "
                     f"balance ${usdt_balance:.2f} < trade_size ${trade_size:.0f}"
@@ -299,15 +291,44 @@ async def run_scalping_scan(app) -> None:
                     parse_mode="Markdown",
                 )
 
+            # Refresh balance before executing setups
+            try:
+                _, usdt_balance = await asyncio.wait_for(
+                    client.get_portfolio(), timeout=15
+                )
+            except Exception:
+                pass  # use last known balance
+
             for setup in setups:
+                symbol = setup["symbol"]
+
+                # Per-trade balance check — notify with symbol name
+                if usdt_balance < trade_size:
+                    await app.bot.send_message(
+                        user_id,
+                        f"⚠️ *Scalping — رصيد غير كافٍ*\n\n"
+                        f"📌 العملة: `{symbol}`\n"
+                        f"💰 رصيدك الحالي: `${usdt_balance:.2f} USDT`\n"
+                        f"📦 حجم الصفقة المطلوب: `${trade_size:.0f} USDT`\n\n"
+                        f"أضف رصيداً أو قلّل حجم الصفقة بـ `/scalping_size`",
+                        parse_mode="Markdown",
+                    )
+                    logger.warning(
+                        f"Scalping: skipping {symbol} for user {user_id} — "
+                        f"balance ${usdt_balance:.2f} < trade_size ${trade_size:.0f}"
+                    )
+                    continue
+
                 result = await execute_trade(setup, client.exchange)
 
                 if result["status"] == "ok":
+                    # Deduct from local balance to avoid over-trading in same scan
+                    usdt_balance -= trade_size
                     await trade_monitor.add_trade(setup, result, user_id)
                     await _send_signal(app.bot, user_id, setup, executed=True)
                 else:
                     reason = result.get("reason", "")
-                    logger.warning(f"Scalping: execute failed {setup['symbol']}: {reason}")
+                    logger.warning(f"Scalping: execute failed {symbol}: {reason}")
                     await _send_signal(app.bot, user_id, setup, executed=False, fail_reason=reason)
 
         except Exception as e:

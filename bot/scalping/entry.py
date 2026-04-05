@@ -1,13 +1,16 @@
 """
-Entry confirmation on 5M candles using Bullish Engulfing pattern.
+Entry confirmation on 5M candles.
 
-A Bullish Engulfing forms when:
-  - The previous candle is bearish (close < open)
-  - The current candle is bullish (close > open)
-  - The current candle's body fully engulfs the previous candle's body
+Checks for bullish momentum using two patterns (either is sufficient):
 
-Using 5M instead of 15M gives faster entry confirmation — catches the
-move earlier, closer to the actual sweep reversal point.
+1. Bullish Engulfing: previous candle bearish, current candle bullish and
+   body overlaps at least 50% of the previous candle's body.
+
+2. Bullish close: last closed candle is bullish with a lower wick >= body
+   (hammer-like), indicating buying pressure at the zone.
+
+Relaxed from strict full-engulf to 50% overlap to catch more valid entries
+without sacrificing directional bias.
 """
 
 from typing import Dict, Any
@@ -18,12 +21,11 @@ async def confirm_entry(symbol: str, exchange) -> Dict[str, Any]:
     Returns:
         {
             "confirmed":   bool,
-            "entry_price": float,  # close of the engulfing candle
+            "entry_price": float,  # close of the confirming candle
         }
     """
     try:
-        # Need at least 3 candles; last one may still be forming
-        ohlcv = await exchange.fetch_ohlcv(symbol, timeframe="5m", limit=4)
+        ohlcv = await exchange.fetch_ohlcv(symbol, timeframe="5m", limit=5)
         if not ohlcv or len(ohlcv) < 3:
             return {"confirmed": False, "entry_price": 0.0}
 
@@ -36,16 +38,29 @@ async def confirm_entry(symbol: str, exchange) -> Dict[str, Any]:
         curr_open  = float(curr[1])
         curr_close = float(curr[4])
 
-        prev_bearish  = prev_close < prev_open
-        curr_bullish  = curr_close > curr_open
-        engulfs_body  = curr_open <= prev_close and curr_close >= prev_open
+        # ── Pattern 1: Relaxed Bullish Engulfing (50% body overlap) ──────
+        prev_bearish = prev_close < prev_open
+        curr_bullish = curr_close > curr_open
+        prev_body    = abs(prev_open - prev_close)
+        overlap      = min(curr_close, prev_open) - max(curr_open, prev_close)
+        partial_engulf = prev_body > 0 and overlap >= prev_body * 0.5
 
-        confirmed = prev_bearish and curr_bullish and engulfs_body
+        if prev_bearish and curr_bullish and partial_engulf:
+            return {"confirmed": True, "entry_price": curr_close}
 
-        return {
-            "confirmed":   confirmed,
-            "entry_price": curr_close if confirmed else 0.0,
-        }
+        # ── Pattern 2: Hammer / bullish rejection candle ──────────────────
+        curr_body       = abs(curr_close - curr_open)
+        curr_lower_wick = min(curr_open, curr_close) - float(curr[3])
+        is_hammer = (
+            curr_bullish
+            and curr_body > 0
+            and curr_lower_wick >= curr_body * 1.5
+        )
+
+        if is_hammer:
+            return {"confirmed": True, "entry_price": curr_close}
+
+        return {"confirmed": False, "entry_price": 0.0}
 
     except Exception:
         return {"confirmed": False, "entry_price": 0.0}

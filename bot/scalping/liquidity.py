@@ -1,20 +1,17 @@
 """
-Liquidity zone detection using 4H candles.
+Liquidity zone detection using 1H candles.
 
-Fetches the last 50 4H candles (~8 days) and identifies the highest high
-and lowest low. Returns whether the current price is near either zone.
+Fetches the last 24 1H candles (~1 day) and identifies local support/resistance.
+Returns whether the current price is near the low zone (buy side).
 
-Using 50 candles instead of 20 gives a wider, more meaningful zone that
-captures weekly swing highs/lows where liquidity actually pools.
-The proximity threshold is 3% (was 2%) to account for crypto volatility
-and avoid missing valid setups where price is approaching but not yet
-at the exact zone boundary.
+Using 1H instead of 4H gives more frequent, actionable zones that price
+actually revisits. Proximity threshold is 5% to catch approaches early.
 """
 
 from typing import Dict, Any
 
-_LOOKBACK       = 50    # 50 × 4H = ~8 days
-_PROXIMITY_PCT  = 0.03  # price within 3% of zone boundary
+_LOOKBACK       = 24    # 24 × 1H = 1 day
+_PROXIMITY_PCT  = 0.05  # price within 5% of zone boundary
 
 
 async def get_liquidity_zones(symbol: str, exchange) -> Dict[str, Any]:
@@ -29,7 +26,7 @@ async def get_liquidity_zones(symbol: str, exchange) -> Dict[str, Any]:
         }
     """
     try:
-        ohlcv = await exchange.fetch_ohlcv(symbol, timeframe="4h", limit=_LOOKBACK)
+        ohlcv = await exchange.fetch_ohlcv(symbol, timeframe="1h", limit=_LOOKBACK)
         if not ohlcv or len(ohlcv) < 5:
             return _empty_result()
 

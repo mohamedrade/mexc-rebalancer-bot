@@ -17,10 +17,10 @@ from bot.scalping.risk     import calculate_risk
 
 logger = logging.getLogger(__name__)
 
-MIN_VOLUME_24H  = 500_000   # $500K minimum 24h volume
-MAX_SPREAD_PCT  = 0.2       # 0.2% maximum spread
-MIN_VOLATILITY  = 0.5       # minimum 24h price range % — flat coins not worth scalping
-MAX_SETUPS      = 3         # cap signals per scan to avoid overtrading
+MIN_VOLUME_24H  = 200_000   # $200K minimum 24h volume
+MAX_SPREAD_PCT  = 0.5       # 0.5% maximum spread
+MIN_VOLATILITY  = 0.3       # minimum 24h price range % — flat coins not worth scalping
+MAX_SETUPS      = 5         # cap signals per scan
 
 
 async def get_top_symbols(exchange, limit: int = 200) -> List[str]:
@@ -95,27 +95,31 @@ async def scan(
             continue
 
         try:
-            # ── Step 1: 4H Liquidity Zone ──────────────────────────────────
+            # ── Step 1: 1H Liquidity Zone ──────────────────────────────────
             liq = await get_liquidity_zones(symbol, exchange)
             if not liq["near_zone"] or liq["side"] != "buy":
+                logger.debug(f"Scanner: {symbol} — failed liq (near={liq['near_zone']} side={liq['side']})")
                 continue
             passed_liq += 1
 
-            # ── Step 2: 1H CVD ─────────────────────────────────────────────
+            # ── Step 2: CVD ────────────────────────────────────────────────
             cvd = await get_cvd(symbol, exchange)
             if cvd["trend"] != "up":
+                logger.debug(f"Scanner: {symbol} — failed CVD (trend={cvd['trend']})")
                 continue
             passed_cvd += 1
 
-            # ── Step 3: 30M Sweep ──────────────────────────────────────────
+            # ── Step 3: 15M Sweep ──────────────────────────────────────────
             sweep = await detect_sweep(symbol, exchange, liq["low"])
             if not sweep["swept"] or not sweep["recovered"]:
+                logger.debug(f"Scanner: {symbol} — failed sweep")
                 continue
             passed_sweep += 1
 
-            # ── Step 4: 15M Engulfing ──────────────────────────────────────
+            # ── Step 4: 5M Entry Confirmation ─────────────────────────────
             entry = await confirm_entry(symbol, exchange)
             if not entry["confirmed"]:
+                logger.debug(f"Scanner: {symbol} — failed entry confirmation")
                 continue
             passed_entry += 1
 
