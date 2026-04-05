@@ -180,6 +180,7 @@ async def run_scalping_scan(app) -> None:
 
     for row in users:
         user_id = row["user_id"]
+        client = None
         try:
             settings = await db.get_settings(user_id)
             if not settings or not settings.get("mexc_api_key"):
@@ -201,7 +202,7 @@ async def run_scalping_scan(app) -> None:
                 result = await execute_trade(setup, client.exchange)
 
                 if result["status"] == "ok":
-                    trade_monitor.add_trade(setup, result)
+                    await trade_monitor.add_trade(setup, result, user_id)
                     await _send_signal(app.bot, user_id, setup)
                 else:
                     logger.warning(
@@ -211,10 +212,11 @@ async def run_scalping_scan(app) -> None:
         except Exception as e:
             logger.error(f"Scalping scan error for user {user_id}: {e}")
         finally:
-            try:
-                await client.close()
-            except Exception:
-                pass
+            if client is not None:
+                try:
+                    await client.close()
+                except Exception:
+                    pass
 
 
 # ── Monitor job (called by scheduler every 60 sec) ────────────────────────────

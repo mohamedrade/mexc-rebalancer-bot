@@ -93,7 +93,7 @@ async def _do_rebalance(app, user_id: int, auto: bool = False):
         )
 
         summary = f"{'تلقائي' if auto else 'يدوي'}: {ok} ناجح، {err} خطأ"
-        portfolio_id = await db.get_active_portfolio_id(user_id)
+        # portfolio_id was already fetched above — reuse it instead of querying again
         await db.add_history(user_id, now_str, summary, traded,
                              1 if err == 0 else 0, portfolio_id=portfolio_id)
 

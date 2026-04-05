@@ -16,6 +16,13 @@ ALLOWED_USER_IDS = [
     if i.strip().isdigit()
 ]
 
+if not ALLOWED_USER_IDS:
+    print(
+        "[WARN] ALLOWED_USER_IDS is not set — the bot will respond to ANY Telegram user. "
+        "Set this variable to restrict access.",
+        flush=True,
+    )
+
 # PostgreSQL takes priority; fall back to SQLite for local dev
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 

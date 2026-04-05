@@ -43,7 +43,9 @@ async def portfolio_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     threshold = settings.get("threshold", 5.0)
 
     capital = portfolio_info.get("capital_usdt", 0.0) if portfolio_info else 0.0
-    effective_total = capital if capital > 0 else total_usdt
+    # Use min(capital, actual_balance) so displayed percentages match rebalance logic.
+    # If no capital budget is set, use the full account balance.
+    effective_total = min(capital, total_usdt) if capital > 0 else total_usdt
 
     portfolio_name = portfolio_info.get("name", "") if portfolio_info else ""
     capital_line = (

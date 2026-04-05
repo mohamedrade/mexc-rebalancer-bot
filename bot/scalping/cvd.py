@@ -1,9 +1,8 @@
 """
-Cumulative Volume Delta (CVD) calculation using recent trades on 1H window.
+Cumulative Volume Delta (CVD) calculation using recent trades.
 
-MEXC doesn't expose CVD directly, so we approximate it from recent trades:
-  - trades where price >= previous price  → buy volume
-  - trades where price <  previous price  → sell volume
+Uses the `side` field returned by MEXC for each trade (buy/sell).
+Falls back to price-direction comparison if `side` is unavailable.
 CVD = cumulative sum of (buy_vol - sell_vol)
 """
 
@@ -30,10 +29,19 @@ async def get_cvd(symbol: str, exchange) -> Dict[str, Any]:
         for t in trades[1:]:
             price  = float(t["price"])
             amount = float(t["amount"])
-            if price >= prev_price:
-                cvd += amount    # buy pressure
+            side   = t.get("side")  # "buy" or "sell" from exchange
+
+            if side == "buy":
+                cvd += amount
+            elif side == "sell":
+                cvd -= amount
             else:
-                cvd -= amount    # sell pressure
+                # Fallback: infer direction from price movement
+                if price >= prev_price:
+                    cvd += amount
+                else:
+                    cvd -= amount
+
             prev_price = price
 
         if cvd > 0:
