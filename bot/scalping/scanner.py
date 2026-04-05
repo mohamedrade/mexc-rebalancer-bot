@@ -82,13 +82,15 @@ async def scan(
         List of valid setups (capped at MAX_SETUPS per scan).
     """
     symbols = await get_top_symbols(exchange)
-    setups  = []
+    logger.info(f"Scanner: checking {len(symbols)} symbols")
+
+    passed_liq = passed_cvd = passed_sweep = passed_entry = 0
+    setups = []
 
     for symbol in symbols:
         if len(setups) >= MAX_SETUPS:
             break
 
-        # Skip if already in a trade
         if symbol in open_symbols:
             continue
 
@@ -97,21 +99,25 @@ async def scan(
             liq = await get_liquidity_zones(symbol, exchange)
             if not liq["near_zone"] or liq["side"] != "buy":
                 continue
+            passed_liq += 1
 
             # ── Step 2: 1H CVD ─────────────────────────────────────────────
             cvd = await get_cvd(symbol, exchange)
             if cvd["trend"] != "up":
                 continue
+            passed_cvd += 1
 
             # ── Step 3: 30M Sweep ──────────────────────────────────────────
             sweep = await detect_sweep(symbol, exchange, liq["low"])
             if not sweep["swept"] or not sweep["recovered"]:
                 continue
+            passed_sweep += 1
 
             # ── Step 4: 15M Engulfing ──────────────────────────────────────
             entry = await confirm_entry(symbol, exchange)
             if not entry["confirmed"]:
                 continue
+            passed_entry += 1
 
             # ── Step 5: Risk / R/R validation ─────────────────────────────
             risk = calculate_risk(
@@ -142,7 +148,11 @@ async def scan(
             logger.info(f"Scanner: setup found → {symbol} R/R={risk['risk_reward']}")
 
         except Exception as e:
-            logger.debug(f"Scanner: error on {symbol}: {e}")
+            logger.info(f"Scanner: error on {symbol}: {e}")
             continue
 
+    logger.info(
+        f"Scanner: done — liq={passed_liq} cvd={passed_cvd} "
+        f"sweep={passed_sweep} entry={passed_entry} setups={len(setups)}"
+    )
     return setups
