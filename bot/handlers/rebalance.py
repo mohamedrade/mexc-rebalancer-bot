@@ -203,6 +203,7 @@ async def rebalance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         context.user_data.pop("_pending_trades", None)
         context.user_data.pop("_pending_portfolio_id", None)
+        context.user_data.pop("_pending_ts", None)
         await query.edit_message_text(text, parse_mode="Markdown", reply_markup=main_menu_kb())
 
 

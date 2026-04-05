@@ -10,9 +10,8 @@ Tracks all open scalping trades and handles:
 """
 
 import logging
-import asyncio
 from datetime import datetime, timezone
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 from bot.database import db
 

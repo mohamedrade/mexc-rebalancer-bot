@@ -347,17 +347,24 @@ async def run_scalping_scan(app) -> None:
 # ── Monitor job (called by scheduler every 60 sec) ────────────────────────────
 
 async def run_scalping_monitor(app) -> None:
-    """Check all open trades against current prices."""
+    """Check all open trades against current prices.
+
+    Derives the user list from open_trades directly — not from scalping_enabled —
+    so trades are monitored even if the user toggled scalping off after entry.
+    """
     if not trade_monitor.open_trades:
         return
 
-    try:
-        users = await db.get_all_users_with_scalping()
-    except Exception:
+    # Collect unique user_ids from open trades (skip trades with no user_id)
+    user_ids = {
+        t.get("user_id")
+        for t in trade_monitor.open_trades.values()
+        if t.get("user_id") is not None
+    }
+    if not user_ids:
         return
 
-    for row in users:
-        user_id = row["user_id"]
+    for user_id in user_ids:
         try:
             settings = await db.get_settings(user_id)
             if not settings or not settings.get("mexc_api_key"):
