@@ -196,6 +196,29 @@ class Database:
                     breakeven INTEGER DEFAULT 0
                 )"""
             )
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS grids (
+                    id SERIAL PRIMARY KEY,
+                    user_id BIGINT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    center REAL,
+                    upper REAL,
+                    lower REAL,
+                    upper_pct REAL,
+                    lower_pct REAL,
+                    steps INTEGER,
+                    step_pct REAL,
+                    order_size_usdt REAL,
+                    take_profit REAL,
+                    stop_loss REAL,
+                    buy_orders TEXT DEFAULT '[]',
+                    sell_orders TEXT DEFAULT '[]',
+                    total_trades INTEGER DEFAULT 0,
+                    shifts INTEGER DEFAULT 0,
+                    mexc_api_key TEXT,
+                    mexc_secret_key TEXT,
+                    created_at TEXT DEFAULT (NOW()::TEXT)
+                )""")
             # Safe migrations
             for sql in [
                 "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS active_portfolio_id INTEGER",
@@ -270,6 +293,29 @@ class Database:
                     t2_order_id TEXT,
                     opened_at TEXT,
                     breakeven INTEGER DEFAULT 0
+                )""")
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS grids (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    symbol TEXT NOT NULL,
+                    center REAL,
+                    upper REAL,
+                    lower REAL,
+                    upper_pct REAL,
+                    lower_pct REAL,
+                    steps INTEGER,
+                    step_pct REAL,
+                    order_size_usdt REAL,
+                    take_profit REAL,
+                    stop_loss REAL,
+                    buy_orders TEXT DEFAULT '[]',
+                    sell_orders TEXT DEFAULT '[]',
+                    total_trades INTEGER DEFAULT 0,
+                    shifts INTEGER DEFAULT 0,
+                    mexc_api_key TEXT,
+                    mexc_secret_key TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
                 )""")
             await conn.commit()
             for sql in [
@@ -577,6 +623,109 @@ class Database:
             return await conn.fetchall(
                 "SELECT user_id FROM user_settings WHERE whale_enabled=1"
             )
+
+    # ── Grid persistence ───────────────────────────────────────────────────────
+
+    async def save_grid(self, grid: dict) -> int:
+        """Insert a new grid and return its id."""
+        import json
+        buy_orders  = json.dumps(grid.get("buy_orders", []))
+        sell_orders = json.dumps(grid.get("sell_orders", []))
+        async with self._conn() as conn:
+            if _USE_PG:
+                return await conn.fetchval(
+                    """INSERT INTO grids
+                       (user_id, symbol, center, upper, lower, upper_pct, lower_pct,
+                        steps, step_pct, order_size_usdt, take_profit, stop_loss,
+                        buy_orders, sell_orders, mexc_api_key, mexc_secret_key)
+                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+                       RETURNING id""",
+                    grid["user_id"], grid["symbol"], grid["center"],
+                    grid["upper"], grid["lower"], grid["upper_pct"], grid["lower_pct"],
+                    grid["steps"], grid["step_pct"], grid["order_size_usdt"],
+                    grid.get("take_profit"), grid.get("stop_loss"),
+                    buy_orders, sell_orders,
+                    grid["mexc_api_key"], grid["mexc_secret_key"],
+                )
+            else:
+                await conn.execute(
+                    """INSERT INTO grids
+                       (user_id, symbol, center, upper, lower, upper_pct, lower_pct,
+                        steps, step_pct, order_size_usdt, take_profit, stop_loss,
+                        buy_orders, sell_orders, mexc_api_key, mexc_secret_key)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (grid["user_id"], grid["symbol"], grid["center"],
+                     grid["upper"], grid["lower"], grid["upper_pct"], grid["lower_pct"],
+                     grid["steps"], grid["step_pct"], grid["order_size_usdt"],
+                     grid.get("take_profit"), grid.get("stop_loss"),
+                     buy_orders, sell_orders,
+                     grid["mexc_api_key"], grid["mexc_secret_key"]),
+                )
+                await conn.commit()
+                row = await conn.fetchone("SELECT last_insert_rowid() as id")
+                return row["id"]
+
+    async def update_grid(self, grid: dict) -> None:
+        import json
+        buy_orders  = json.dumps(grid.get("buy_orders", []))
+        sell_orders = json.dumps(grid.get("sell_orders", []))
+        async with self._conn() as conn:
+            if _USE_PG:
+                await conn.execute(
+                    """UPDATE grids SET upper=$1, lower=$2, center=$3,
+                       buy_orders=$4, sell_orders=$5,
+                       total_trades=$6, shifts=$7 WHERE id=$8""",
+                    grid["upper"], grid["lower"], grid["center"],
+                    buy_orders, sell_orders,
+                    grid.get("total_trades", 0), grid.get("shifts", 0), grid["id"],
+                )
+            else:
+                await conn.execute(
+                    """UPDATE grids SET upper=?, lower=?, center=?,
+                       buy_orders=?, sell_orders=?,
+                       total_trades=?, shifts=? WHERE id=?""",
+                    (grid["upper"], grid["lower"], grid["center"],
+                     buy_orders, sell_orders,
+                     grid.get("total_trades", 0), grid.get("shifts", 0), grid["id"]),
+                )
+                await conn.commit()
+
+    async def delete_grid(self, grid_id: int) -> None:
+        async with self._conn() as conn:
+            if _USE_PG:
+                await conn.execute("DELETE FROM grids WHERE id=$1", grid_id)
+            else:
+                await conn.execute("DELETE FROM grids WHERE id=?", (grid_id,))
+                await conn.commit()
+
+    async def load_grids(self) -> list:
+        """Load all active grids on startup."""
+        import json
+        async with self._conn() as conn:
+            rows = await conn.fetchall("SELECT * FROM grids")
+        result = []
+        for row in rows:
+            g = dict(row)
+            g["buy_orders"]  = json.loads(g.get("buy_orders")  or "[]")
+            g["sell_orders"] = json.loads(g.get("sell_orders") or "[]")
+            result.append(g)
+        return result
+
+    async def load_user_grids(self, user_id: int) -> list:
+        """Load grids for a specific user."""
+        import json
+        async with self._conn() as conn:
+            if _USE_PG:
+                rows = await conn.fetchall("SELECT * FROM grids WHERE user_id=$1", user_id)
+            else:
+                rows = await conn.fetchall("SELECT * FROM grids WHERE user_id=?", (user_id,))
+        result = []
+        for row in rows:
+            g = dict(row)
+            g["buy_orders"]  = json.loads(g.get("buy_orders")  or "[]")
+            g["sell_orders"] = json.loads(g.get("sell_orders") or "[]")
+            result.append(g)
+        return result
 
     # ── Scalping Trades persistence ────────────────────────────────────────────
 

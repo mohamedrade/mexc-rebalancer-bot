@@ -43,6 +43,14 @@ from bot.handlers.whale_handler import (
     run_whale_monitor,
 )
 from bot.scalping.whale_monitor import whale_monitor
+from bot.handlers.grid_handler import (
+    build_grid_conv,
+    grid_menu_callback,
+    grid_detail_callback,
+    grid_stop_callback,
+    run_grid_monitor,
+)
+from bot.grid.monitor import grid_monitor
 from bot.handlers.portfolio_manager import (
     portfolios_callback, portfolio_detail_callback,
     switch_portfolio_callback, delete_portfolio_callback,
@@ -155,6 +163,7 @@ def build_app() -> Application:
     app.add_handler(create_portfolio_conv)
     app.add_handler(edit_name_conv)
     app.add_handler(edit_capital_conv)
+    app.add_handler(build_grid_conv())
 
     # ── Commands ───────────────────────────────────────────────────────────────
     app.add_handler(CommandHandler("start", start_handler))
@@ -187,6 +196,11 @@ def build_app() -> Application:
     app.add_handler(CallbackQueryHandler(whale_toggle_callback,      pattern="^whale:toggle$"))
     app.add_handler(CallbackQueryHandler(whale_open_trades_callback, pattern="^whale:open_trades$"))
 
+    # ── Grid Bot ───────────────────────────────────────────────────────────────
+    app.add_handler(CallbackQueryHandler(grid_menu_callback,   pattern="^grid:menu$"))
+    app.add_handler(CallbackQueryHandler(grid_detail_callback, pattern="^grid_detail:\\d+$"))
+    app.add_handler(CallbackQueryHandler(grid_stop_callback,   pattern="^grid_stop:\\d+$"))
+
     # ── Portfolio Management ───────────────────────────────────────────────────
     app.add_handler(CallbackQueryHandler(portfolios_callback,               pattern="^portfolios$"))
     app.add_handler(CallbackQueryHandler(portfolio_detail_callback,         pattern="^portfolio:\\d+$"))
@@ -200,6 +214,7 @@ def build_app() -> Application:
 async def main():
     await db.init()
     await trade_monitor.load_from_db()
+    await grid_monitor.load_from_db()
     app = build_app()
     scheduler = await start_scheduler(app)
 
@@ -237,6 +252,16 @@ async def main():
         seconds=30,
         args=[app],
         id="whale_monitor",
+        replace_existing=True,
+    )
+
+    # Grid Bot job
+    scheduler.add_job(
+        run_grid_monitor,
+        trigger="interval",
+        seconds=30,
+        args=[app],
+        id="grid_monitor",
         replace_existing=True,
     )
     logger.info("🤖 Bot started polling...")
