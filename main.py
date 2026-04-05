@@ -35,6 +35,14 @@ from bot.handlers.scalping_handler import (
     run_scalping_scan,
     run_scalping_monitor,
 )
+from bot.handlers.whale_handler import (
+    whale_menu_callback,
+    whale_toggle_callback,
+    whale_open_trades_callback,
+    run_whale_scan,
+    run_whale_monitor,
+)
+from bot.scalping.whale_monitor import whale_monitor
 from bot.handlers.portfolio_manager import (
     portfolios_callback, portfolio_detail_callback,
     switch_portfolio_callback, delete_portfolio_callback,
@@ -174,6 +182,11 @@ def build_app() -> Application:
     app.add_handler(CallbackQueryHandler(scalping_open_trades_callback, pattern="^scalping:open_trades$"))
     app.add_handler(CallbackQueryHandler(scalping_settings_callback,    pattern="^scalping:settings$"))
 
+    # ── Whale Order Flow ───────────────────────────────────────────────────────
+    app.add_handler(CallbackQueryHandler(whale_menu_callback,        pattern="^whale:menu$"))
+    app.add_handler(CallbackQueryHandler(whale_toggle_callback,      pattern="^whale:toggle$"))
+    app.add_handler(CallbackQueryHandler(whale_open_trades_callback, pattern="^whale:open_trades$"))
+
     # ── Portfolio Management ───────────────────────────────────────────────────
     app.add_handler(CallbackQueryHandler(portfolios_callback,               pattern="^portfolios$"))
     app.add_handler(CallbackQueryHandler(portfolio_detail_callback,         pattern="^portfolio:\\d+$"))
@@ -190,7 +203,8 @@ async def main():
     app = build_app()
     scheduler = await start_scheduler(app)
 
-    # Scalping jobs
+
+    # Smart Liquidity Flow jobs
     scheduler.add_job(
         run_scalping_scan,
         trigger="interval",
@@ -205,6 +219,24 @@ async def main():
         seconds=60,
         args=[app],
         id="scalping_monitor",
+        replace_existing=True,
+    )
+
+    # Whale Order Flow jobs
+    scheduler.add_job(
+        run_whale_scan,
+        trigger="interval",
+        minutes=5,
+        args=[app],
+        id="whale_scan",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        run_whale_monitor,
+        trigger="interval",
+        seconds=30,
+        args=[app],
+        id="whale_monitor",
         replace_existing=True,
     )
     logger.info("🤖 Bot started polling...")

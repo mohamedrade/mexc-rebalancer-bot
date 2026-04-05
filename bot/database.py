@@ -204,6 +204,8 @@ class Database:
                 "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS scalping_enabled INTEGER DEFAULT 0",
                 "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS scalping_trade_size REAL DEFAULT 10.0",
                 "ALTER TABLE scalping_trades ADD COLUMN IF NOT EXISTS highest_price REAL",
+                "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS whale_enabled INTEGER DEFAULT 0",
+                "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS whale_trade_size REAL DEFAULT 10.0",
             ]:
                 try:
                     await conn.execute(sql)
@@ -277,6 +279,8 @@ class Database:
                 "ALTER TABLE user_settings ADD COLUMN scalping_enabled INTEGER DEFAULT 0",
                 "ALTER TABLE user_settings ADD COLUMN scalping_trade_size REAL DEFAULT 10.0",
                 "ALTER TABLE scalping_trades ADD COLUMN highest_price REAL",
+                "ALTER TABLE user_settings ADD COLUMN whale_enabled INTEGER DEFAULT 0",
+                "ALTER TABLE user_settings ADD COLUMN whale_trade_size REAL DEFAULT 10.0",
             ]:
                 try:
                     await conn.execute(sql)
@@ -565,6 +569,12 @@ class Database:
         async with self._conn() as conn:
             return await conn.fetchall(
                 "SELECT user_id FROM user_settings WHERE scalping_enabled=1"
+            )
+
+    async def get_all_users_with_whale(self) -> list:
+        async with self._conn() as conn:
+            return await conn.fetchall(
+                "SELECT user_id FROM user_settings WHERE whale_enabled=1"
             )
 
     # ── Scalping Trades persistence ────────────────────────────────────────────

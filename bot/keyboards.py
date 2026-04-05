@@ -16,6 +16,7 @@ def main_menu_kb() -> InlineKeyboardMarkup:
             InlineKeyboardButton("🗂 محافظي", callback_data="portfolios"),
             InlineKeyboardButton("🎯 Scalping", callback_data="scalping:menu"),
         ],
+        [InlineKeyboardButton("🐋 Whale Strategy", callback_data="whale:menu")],
         [InlineKeyboardButton("💡 كيف يعمل البوت؟", callback_data="menu:info")],
     ])
 
