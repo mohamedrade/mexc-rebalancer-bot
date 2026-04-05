@@ -74,7 +74,7 @@ async def scalping_menu_callback(update: Update, context: ContextTypes.DEFAULT_T
     user_id = update.effective_user.id
 
     sc = await _get_scalping_settings(user_id)
-    open_count = len(trade_monitor.open_symbols)
+    open_count = len(trade_monitor.open_symbols_for(user_id))
 
     await query.edit_message_text(
         _status_text(sc, open_count),
@@ -97,7 +97,7 @@ async def scalping_toggle_callback(update: Update, context: ContextTypes.DEFAULT
     await db.update_settings(user_id, scalping_enabled=new_state)
 
     sc["enabled"] = bool(new_state)
-    open_count = len(trade_monitor.open_symbols)
+    open_count = len(trade_monitor.open_symbols_for(user_id))
 
     action = "تشغيل" if new_state else "إيقاف"
     await query.answer(f"✅ تم {action} الـ Scalping")
@@ -247,7 +247,8 @@ async def run_scalping_scan(app) -> None:
                 )
 
             # ── Scan start notification ────────────────────────────────────
-            open_count = len(trade_monitor.open_symbols)
+            user_open_symbols = trade_monitor.open_symbols_for(user_id)
+            open_count = len(user_open_symbols)
             await app.bot.send_message(
                 user_id,
                 f"🔍 *Scalping — جاري المسح*\n\n"
@@ -260,7 +261,7 @@ async def run_scalping_scan(app) -> None:
 
             try:
                 setups = await asyncio.wait_for(
-                    scan(client.exchange, trade_monitor.open_symbols, trade_size),
+                    scan(client.exchange, user_open_symbols, trade_size),
                     timeout=120,
                 )
             except asyncio.TimeoutError:

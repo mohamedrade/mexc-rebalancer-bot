@@ -38,6 +38,7 @@ class TradeMonitor:
         initial_sl      = setup["stop_loss"]
         trade = {
             "symbol":        symbol,
+            "user_id":       user_id,
             "entry_price":   entry_price,
             "stop_loss":     initial_sl,
             "highest_price": entry_price,   # tracks peak price for trailing
@@ -71,8 +72,12 @@ class TradeMonitor:
         try:
             rows = await db.load_scalping_trades()
             for row in rows:
+                # Skip whale trades — whale_monitor handles those
+                if row.get("strategy") == "whale":
+                    continue
                 self.open_trades[row["symbol"]] = {
                     "symbol":        row["symbol"],
+                    "user_id":       row.get("user_id"),
                     "entry_price":   row["entry_price"],
                     "stop_loss":     row["stop_loss"],
                     "highest_price": row.get("highest_price") or row["entry_price"],
@@ -96,22 +101,32 @@ class TradeMonitor:
     def open_symbols(self) -> set:
         return set(self.open_trades.keys())
 
+    def open_symbols_for(self, user_id: int) -> set:
+        """Return only the symbols with open trades belonging to user_id."""
+        return {sym for sym, t in self.open_trades.items() if t.get("user_id") == user_id}
+
     async def check_all(self, exchange, bot, user_id: int) -> None:
         """
-        Check every open trade against current price.
+        Check open trades belonging to user_id against current price.
         Called every 60 seconds by the scheduler.
+        Filters by user_id so multiple users share the same singleton safely.
         """
-        if not self.open_trades:
+        # Only process trades that belong to this user
+        user_trades = {
+            sym: t for sym, t in self.open_trades.items()
+            if t.get("user_id") == user_id
+        }
+        if not user_trades:
             return
 
-        symbols = list(self.open_trades.keys())
+        symbols = list(user_trades.keys())
         try:
             tickers = await exchange.fetch_tickers(symbols)
         except Exception as e:
             logger.error(f"Monitor: fetch_tickers failed: {e}")
             return
 
-        for symbol, trade in list(self.open_trades.items()):
+        for symbol, trade in list(user_trades.items()):
             ticker = tickers.get(symbol, {})
             price  = float(ticker.get("last") or 0)
             if price <= 0:
@@ -159,19 +174,14 @@ class TradeMonitor:
             trade["t1_hit"]    = True
             trade["breakeven"] = True
 
-            # Sell half position via market order
+            # Sell half position via market order.
+            # No limit order to cancel — executor no longer places one,
+            # so there is no risk of a double-sell race.
             try:
                 await exchange.create_market_sell_order(symbol, trade["qty_half"])
                 logger.info(f"Monitor: {symbol} T1 hit — sold {trade['qty_half']} @ {price:.6g}")
             except Exception as e:
                 logger.error(f"Monitor: T1 partial sell failed for {symbol}: {e}")
-
-            # Cancel the T1 limit order if it exists (may already be filled)
-            if trade.get("t1_order_id"):
-                try:
-                    await exchange.cancel_order(trade["t1_order_id"], symbol)
-                except Exception:
-                    pass
 
             # Tighten trail immediately
             new_sl = round(price * (1 - TRAIL_PCT_AFTER_T1), 8)

@@ -42,7 +42,7 @@ from bot.handlers.whale_handler import (
     run_whale_scan,
     run_whale_monitor,
 )
-from bot.scalping.whale_monitor import whale_monitor
+from bot.scalping.whale_monitor import whale_monitor, WhaleTradeMonitor
 from bot.handlers.grid_handler import (
     build_grid_conv,
     grid_menu_callback,
@@ -214,6 +214,7 @@ def build_app() -> Application:
 async def main():
     await db.init()
     await trade_monitor.load_from_db()
+    await whale_monitor.load_from_db()
     await grid_monitor.load_from_db()
     app = build_app()
     scheduler = await start_scheduler(app)

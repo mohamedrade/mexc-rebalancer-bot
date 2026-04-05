@@ -97,12 +97,31 @@ class GridMonitor:
 
         changed = False
 
+        # Fetch all open orders in one API call instead of one per order.
+        # Build a set of still-open order IDs for O(1) lookup.
+        try:
+            open_orders_raw = await exchange.fetch_open_orders(symbol)
+            open_order_ids  = {str(o["id"]) for o in open_orders_raw}
+        except Exception as e:
+            logger.warning(f"GridMonitor: fetch_open_orders failed for {symbol}: {e}")
+            open_order_ids = None  # fall back to per-order fetch below
+
+        async def _is_filled(order_id: str) -> bool:
+            """Return True if the order is no longer open (filled or cancelled)."""
+            if open_order_ids is not None:
+                return str(order_id) not in open_order_ids
+            # Fallback: individual fetch
+            try:
+                o = await exchange.fetch_order(order_id, symbol)
+                return o["status"] == "closed"
+            except Exception:
+                return False
+
         for order in buy_orders:
             if order["status"] != "open":
                 continue
             try:
-                o = await exchange.fetch_order(order["order_id"], symbol)
-                if o["status"] == "closed":
+                if await _is_filled(order["order_id"]):
                     order["status"] = "filled"
                     changed = True
                     # Place sell one step above
@@ -127,15 +146,14 @@ class GridMonitor:
             if order["status"] != "open":
                 continue
             try:
-                o = await exchange.fetch_order(order["order_id"], symbol)
-                if o["status"] == "closed":
+                if await _is_filled(order["order_id"]):
                     order["status"] = "filled"
                     changed = True
                     # Place buy one step below
                     buy_price = round(order["price"] - step_size, 8)
                     qty = round(size_per_level / buy_price, 8)
                     try:
-                        new_order = await exchange.create_limit_buy_order(symbol, buy_price, qty)
+                        new_order = await exchange.create_limit_buy_order(symbol, qty, buy_price)
                         buy_orders.append({
                             "price":    buy_price,
                             "qty":      qty,

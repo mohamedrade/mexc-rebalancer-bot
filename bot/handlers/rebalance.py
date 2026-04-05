@@ -1,4 +1,5 @@
 import asyncio
+import time
 from telegram import Update
 from telegram.ext import ContextTypes
 from bot.database import db
@@ -6,6 +7,9 @@ from bot.keyboards import main_menu_kb, rebalance_confirm_kb, rebalance_dry_kb
 from bot.mexc_client import MexcClient
 from bot.rebalancer import calculate_trades
 from datetime import datetime, timezone
+
+# Pending trades expire after 3 minutes — prices may have moved significantly
+_PENDING_TTL_SECONDS = 180
 
 
 async def rebalance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -87,6 +91,7 @@ async def rebalance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         context.user_data["_pending_trades"] = trades
         context.user_data["_pending_portfolio_id"] = portfolio_id
         context.user_data["_pending_total"] = effective_total
+        context.user_data["_pending_ts"] = time.monotonic()
 
         portfolio_name = portfolio_info.get("name", "")
         text = (
@@ -134,8 +139,24 @@ async def rebalance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     elif action == "execute":
         trades = context.user_data.get("_pending_trades", [])
+        pending_ts = context.user_data.get("_pending_ts", 0)
+
         if not trades:
             await query.edit_message_text("❌ انتهت الجلسة. أعد التحقق أولاً.", reply_markup=main_menu_kb())
+            return
+
+        # Reject stale analysis — prices may have moved significantly
+        if time.monotonic() - pending_ts > _PENDING_TTL_SECONDS:
+            context.user_data.pop("_pending_trades", None)
+            context.user_data.pop("_pending_portfolio_id", None)
+            context.user_data.pop("_pending_ts", None)
+            await query.edit_message_text(
+                "⚠️ *انتهت صلاحية التحليل*\n\n"
+                "مرّت أكثر من 3 دقائق منذ آخر تحليل.\n"
+                "أسعار السوق تغيّرت — أعد التحقق أولاً.",
+                parse_mode="Markdown",
+                reply_markup=main_menu_kb(),
+            )
             return
 
         await query.edit_message_text("⏳ جاري تنفيذ الصفقات...")

@@ -71,7 +71,7 @@ async def whale_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_id = update.effective_user.id
     s = await _get_settings(user_id)
     await query.edit_message_text(
-        _status_text(s, len(whale_monitor.open_symbols)),
+        _status_text(s, len(whale_monitor.open_symbols_for(user_id))),
         parse_mode="Markdown",
         reply_markup=whale_menu_kb(s["enabled"]),
     )
@@ -93,7 +93,7 @@ async def whale_toggle_callback(update: Update, context: ContextTypes.DEFAULT_TY
     action = "تشغيل" if new_state else "إيقاف"
     await query.answer(f"✅ تم {action} Whale Strategy")
     await query.edit_message_text(
-        _status_text(s, len(whale_monitor.open_symbols)),
+        _status_text(s, len(whale_monitor.open_symbols_for(user_id))),
         parse_mode="Markdown",
         reply_markup=whale_menu_kb(s["enabled"]),
     )
@@ -171,8 +171,9 @@ async def run_whale_scan(app) -> None:
                     f"${usdt_balance:.2f} < ${trade_size:.0f}, scanning anyway"
                 )
 
-            # Run scan
-            all_open = whale_monitor.open_symbols
+            # Run scan — only pass this user's open symbols to avoid blocking
+            # symbols that belong to other users
+            all_open = whale_monitor.open_symbols_for(user_id)
             try:
                 setups = await asyncio.wait_for(
                     whale_scan(client.exchange, all_open, trade_size),

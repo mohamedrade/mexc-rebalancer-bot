@@ -1,9 +1,10 @@
 """
-Trade executor — places market entry + T1 limit sell on MEXC.
+Trade executor — places market entry only on MEXC.
 
 Since MEXC Spot doesn't support native OCO orders:
   1. Market buy for full qty (using quoteOrderQty / cost)
-  2. Limit sell at target1 for qty_half (partial profit lock)
+  2. No T1 limit order — monitor.py handles T1 via price polling to avoid
+     double-sell (limit fill + market sell racing each other)
   3. No T2 limit order — trailing stop in monitor.py handles the full exit
   4. Stop-loss is managed by monitor.py (price polling)
 """
@@ -22,44 +23,40 @@ async def execute_trade(setup: Dict[str, Any], exchange) -> Dict[str, Any]:
 
     Returns:
         {
-            "status":       "ok" | "error",
-            "symbol":       str,
-            "entry_order":  dict,
-            "target1_order": dict,
+            "status":        "ok" | "error",
+            "symbol":        str,
+            "entry_order":   dict,
+            "target1_order": dict,   # always empty — monitor handles T1
             "target2_order": dict,
-            "reason":       str,   # only on error
+            "filled_qty":    float,
+            "qty_half":      float,
+            "reason":        str,    # only on error
         }
     """
     symbol          = setup["symbol"]
     trade_size_usdt = setup["qty"] * setup["entry_price"]   # recover USDT cost
-    target1         = setup["target1"]
-    target2         = setup["target2"]
 
     try:
-        # ── 1. Market buy (MEXC Spot requires quoteOrderQty, not base qty) ─
+        # ── Market buy (MEXC Spot requires quoteOrderQty, not base qty) ───
         entry_order = await exchange.create_market_buy_order_with_cost(symbol, trade_size_usdt)
         logger.info(f"Executor: market buy {symbol} cost={trade_size_usdt} → order {entry_order.get('id')}")
 
-        # Use the actual filled qty from the order so limit sells match exactly
+        # Use the actual filled qty from the order
         filled_qty = float(entry_order.get("filled") or entry_order.get("amount") or 0)
         if filled_qty <= 0:
-            # Fallback: estimate from cost / average price
             avg_price = float(entry_order.get("average") or entry_order.get("price") or setup["entry_price"])
             filled_qty = trade_size_usdt / avg_price if avg_price > 0 else setup["qty"]
 
         qty_half = round(filled_qty / 2, 8)
 
-        # ── 2. Limit sell at target1 (50%) ────────────────────────────────
-        t1_order = await exchange.create_limit_sell_order(symbol, qty_half, target1)
-        logger.info(f"Executor: limit sell {symbol} @{target1} qty={qty_half} → {t1_order.get('id')}")
-
-        # No T2 limit order — trailing stop in monitor.py handles the exit
+        # T1 and trailing stop are handled entirely by monitor.py via price
+        # polling — no limit orders placed here to prevent double-sell races.
 
         return {
             "status":        "ok",
             "symbol":        symbol,
             "entry_order":   entry_order,
-            "target1_order": t1_order,
+            "target1_order": {},   # intentionally empty
             "target2_order": {},
             "filled_qty":    filled_qty,
             "qty_half":      qty_half,

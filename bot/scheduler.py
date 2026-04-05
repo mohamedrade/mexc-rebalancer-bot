@@ -64,8 +64,18 @@ async def _do_rebalance(app, user_id: int, auto: bool = False):
         else:
             effective_total = total_usdt
 
-        # Skip if account is essentially empty
+        # Skip if account is essentially empty — notify the user so they know
         if effective_total < 1.0:
+            try:
+                await app.bot.send_message(
+                    user_id,
+                    "⚠️ *توازن تلقائي — رصيد غير كافٍ*\n\n"
+                    f"إجمالي الحساب: `${total_usdt:.2f}`\n"
+                    "يجب أن يكون الرصيد أكبر من $1 لتنفيذ التوازن التلقائي.",
+                    parse_mode="Markdown",
+                )
+            except Exception:
+                pass
             return
 
         # Skip if allocations don't sum to ~100%

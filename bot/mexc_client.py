@@ -1,7 +1,14 @@
+import time
 import ccxt.async_support as ccxt
 
 # Minimum USD value to consider an asset worth pricing
 _MIN_VALUE_THRESHOLD = 0.5
+
+# Cache markets for 10 minutes — the list rarely changes and fetch_markets()
+# returns thousands of records on every call without caching.
+_MARKETS_CACHE: dict = {}          # symbol → min_qty
+_MARKETS_CACHE_TS: float = 0.0
+_MARKETS_CACHE_TTL: float = 600.0  # seconds
 
 class MexcClient:
     def __init__(self, api_key: str, secret: str, quote: str = "USDT"):
@@ -85,11 +92,17 @@ class MexcClient:
             tickers = {}
 
         try:
-            markets = await self.exchange.fetch_markets()
-            min_qty_map = {m["symbol"]: m.get("limits", {}).get("amount", {}).get("min", 0) or 0
-                           for m in markets}
+            global _MARKETS_CACHE, _MARKETS_CACHE_TS
+            if time.monotonic() - _MARKETS_CACHE_TS > _MARKETS_CACHE_TTL:
+                markets = await self.exchange.fetch_markets()
+                _MARKETS_CACHE = {
+                    m["symbol"]: m.get("limits", {}).get("amount", {}).get("min", 0) or 0
+                    for m in markets
+                }
+                _MARKETS_CACHE_TS = time.monotonic()
+            min_qty_map = _MARKETS_CACHE
         except Exception:
-            min_qty_map = {}
+            min_qty_map = _MARKETS_CACHE or {}
 
         results = []
         for trade in trades:
