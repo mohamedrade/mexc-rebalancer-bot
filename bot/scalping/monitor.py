@@ -214,13 +214,9 @@ class TradeMonitor:
     ) -> None:
         symbol = trade["symbol"]
 
-        # Cancel any remaining open limit orders (T1 limit if not yet filled)
-        for order_id in [trade.get("t1_order_id"), trade.get("t2_order_id")]:
-            if order_id:
-                try:
-                    await exchange.cancel_order(order_id, symbol)
-                except Exception:
-                    pass
+        # executor no longer places limit orders — nothing to cancel here.
+        # t1_order_id and t2_order_id are kept in the schema for legacy rows
+        # restored from DB but will always be None for new trades.
 
         # Sell remaining position:
         # If T1 was already hit, 50% was already sold — only qty_half remains.

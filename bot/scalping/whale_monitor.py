@@ -130,23 +130,27 @@ class WhaleTradeMonitor:
             await self._close_trade(trade, price, "stop_loss", exchange, bot, user_id)
             return
 
-        # ── T2 hit → sell remaining 40% ────────────────────────────────────
+        # ── T2 hit → sell all remaining qty ───────────────────────────────
+        # If T1 was already hit: 60% was sold, only 40% remains.
+        # If T1 was NOT hit (price jumped straight to T2): sell full qty.
         if not trade["t2_hit"] and price >= target2:
             trade["t2_hit"] = True
+            remaining = trade["qty_40pct"] if trade["t1_hit"] else trade["qty"]
             try:
-                await exchange.create_market_sell_order(symbol, trade["qty_40pct"])
-                logger.info(f"WhaleMonitor: {symbol} T2 hit — sold {trade['qty_40pct']} @ {price:.6g}")
+                await exchange.create_market_sell_order(symbol, remaining)
+                logger.info(f"WhaleMonitor: {symbol} T2 hit — sold {remaining} @ {price:.6g} (t1_hit={trade['t1_hit']})")
             except Exception as e:
                 logger.error(f"WhaleMonitor: T2 sell failed {symbol}: {e}")
 
             await self.remove_trade(symbol)
             entry  = trade["entry_price"]
             pnl    = ((price - entry) / entry) * 100
+            t1_note = "" if trade["t1_hit"] else "\n⚡ السعر قفز مباشرة لهدف 2 (بيع 100%)"
             await self._notify(
                 bot, user_id,
                 f"✅ *{symbol}* — هدف 2 اتحقق!\n\n"
-                f"🎯 بيع 40% عند `${price:.6g}`  (`+{pnl:.2f}%`)\n"
-                f"📊 الصفقة اتغلقت كاملاً"
+                f"🎯 بيع {'40%' if trade['t1_hit'] else '100%'} عند `${price:.6g}`  (`+{pnl:.2f}%`)\n"
+                f"📊 الصفقة اتغلقت كاملاً{t1_note}"
             )
             return
 

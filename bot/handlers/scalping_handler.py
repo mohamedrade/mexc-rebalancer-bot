@@ -113,7 +113,11 @@ async def scalping_open_trades_callback(update: Update, context: ContextTypes.DE
     query = update.callback_query
     await query.answer()
 
-    trades = trade_monitor.open_trades
+    user_id = update.effective_user.id
+    trades = {
+        sym: t for sym, t in trade_monitor.open_trades.items()
+        if t.get("user_id") == user_id
+    }
     if not trades:
         await query.edit_message_text(
             "📊 *الصفقات المفتوحة*\n\n"
